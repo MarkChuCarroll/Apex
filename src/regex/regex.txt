@@ -1,0 +1,66 @@
+
+<p> There are a couple of problems with regular expressions as they're
+typically written:</p>
+
+<ul>
+<li> They're a compact string. That means that you can't include
+  whitespace to break things up; you can't insert comments
+  or documentation. </li>
+<le> They're pre-quoted. That is, the regexp is surrounded by its own
+  quote, which means that anything inside of it needs to get escaped
+  somehow. </li>
+<li> Grouping is overloaded. Parens are used both for simple grouping, and
+  for specifying submatches that should be accessible after a successful
+  match.</li>
+<li> They're not composable. If you've got two working regexs, and you want
+  to create a new regex 'a|b', it won't work, because of the way
+  submatches work. </li>
+</ul>
+
+<p>How can this be fixed?</p>
+
+<p> If each element of a regexp is effectively a function call which takes
+its own parameters, then you get a syntax that's less compact, but that
+gets rid of most of these problems.</p>
+
+<p> The basic elements of a regex are:</p>
+
+ <dl>
+<dt>Literal characteraers themselves, with escapes if they're also regex
+  metachars. For example, to match the characters "abc", standard regexp
+  syntax is "abc". For Apex regexps, we'll use quoted strings: to
+  match the literal sequence "abc", we'll use <code>_'abc'</code>.</dd>
+<dt>Character sets</dt>
+<dd> A character set is a construct that matches any one in a collection
+of characters. In standard regex syntax, that's written <code>[abc]</code>
+to match any character in the set containing "a", "b", and "c". We'll
+use "/": /'abc'.</dd>
+<dt>Concatenation</dt>
+<dd> One regex followed by another is normally written by just 
+  putting the two side by side. We'll do the same thing - but because
+  the sub-expressions will be contained, we can insert whitespace and
+  comments in between two.</dd>
+<dt>Repetition</dt>
+<dd>Repetition is usually written by following an expression by either
+<code>*</code> or <code>+</code>. We'll do something close to that: we'll
+add an "exponent" operator, with high priority. <code>regex^count</code>,
+where <em>count</em> can be either "+" (for at least one), "*" (for as many as you want), or a positive integer N (for N matches). </dd>
+<dt>Alternation</dt>
+<dd> Alternation is normally written as <code>A | B</code>. We'll keep
+that exactly as is.</dd>
+<dt>Grouping</dt>
+<dd> We'll use parens for grouping.</dd>
+<dt>Binding</dt>
+<dd>Any regex can be bound to a variable, by using <code>$x=regex</code>. If
+  the match succeeds, then the variable will be bound to the sub-part
+  of the string that matched that regex.</dd>
+</dl>
+
+<p> Regexps as a whole will be enclosed in curly braces. You can use
+curlies inside of a regex, because they'll always be either part of
+a character sequence or character set, which will be quoted.</p>
+
+<p> So, the standard regex <code>(ab*)|c([def]+)</code>, where
+you wanted to be able to extract the value o the "([def]+)" submatch would
+be written in Apex as: <code>{(_'a' _'b'^*) | (_'c' $v=/'def'^+)}</code></p>
+
