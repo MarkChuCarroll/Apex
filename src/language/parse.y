@@ -44,25 +44,35 @@ import (
 	strval string
 	intval int
 	node AstNode
+	nodes []AstNode
 	token *Token
-    v vector.Vector
     tokens []Token
-    nodes []AstNode
+
 }
 
-%type <vector.Vector> stmts
+%type <[]AstNode> stmts
 %type <AstNode> stmt
 %type <AstNode> fun_stmt
 %type <AstNode> command_stmt
 %type <[]Token> ident_list_opt
 %type <[]Token> ident_list
+%type <*AstNode> conditional_opt
+
+
+%type <*Token> re_bind_opt
+%type <AstNode> binding_el
+%type <AstNode> choice_el
+%type <AstNode> re_el
+%type <AstNode> rep_el
+%type <AstNode> r
+%type <AstNode> rep_el
 
 %%
 prog: stmts EOF;
 
 stmts:
   stmts DOT stmt { v := $1
-	               v = append(v, $3)
+                   v = append(v, $3)
                    $$ = v 
 	            }
 | stmt { v := make([]AstNode, 0, 10)
@@ -82,9 +92,9 @@ fun_stmt:
   LBRACE stmts RBRACE 
 ;
 
-ident_list_opt:
-  ident_list { $$ = $1 }
-| { $$ = make([]Token, 0, 10) }
+ident_list_opt: 
+  ident_list { $$ = $1 } // (ident...)
+| { $$ = make([]Token, 0, 10) } // ()
 ;
 
 ident_list:
@@ -99,11 +109,30 @@ ident_list:
 ;
 
 command_stmt:
-  choice_command conditional_opt
+  choice_command conditional_opt 
+  {
+    if $2 == nil {
+      $$ = $1
+    } else {
+      cond := $2
+      cond.left = make([]AstNode, 1)
+      cond.left[0] = $1
+      $$ = cond
+    }
+  }
 ;
 
-conditional_opt: 
+conditional_opt:
   QUESTION simple_command COLON simple_command
+        { result := NewAstNode(NODE_COND)
+          result.mid = make([]AstNode, 1)
+          result.mid[0] =  $2
+          result.right = make([]AstNode, 1)
+          result.right[0] = $4
+          $$ = result
+        }
+  |
+        { $$ = nil }
 ;
 
 choice_command:
@@ -112,8 +141,12 @@ choice_command:
 ;
 
 seq_command:
-  seq_command DOT simple_command
-| simple_command
+  seq_command DOT simple_command { result := $1
+	                               result.AddRegexToSeq($3)
+	                               $$ = result }
+| simple_command { result := NewRegexSeq()
+	               result.AddRegexToSeq($1)
+	               $$ = result }
 ;
 
 simple_command:
@@ -211,8 +244,12 @@ regex:
 
 /* repetition */
 re_el:
-  re_el choice_el
-| choice_el
+re_el choice_el { result := $1
+                  result.AddRegexToSeq($2)
+                  $$ = result }
+| choice_el { result := NewRegexSeq()
+	      result.AddRegexToSeq($1)
+              $$ = result }
 ;
 
 choice_el:

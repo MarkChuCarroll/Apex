@@ -20,6 +20,8 @@ package language
 
 type NodeType int32
 
+type Token struct { }
+
 const (
   NODE_APPEND_STR NodeType = iota
   NODE_APPEND_EXPR
@@ -52,14 +54,73 @@ const (
   NODE_RE_GROUP
   NODE_RE_BIND
   NODE_RE_SEQ
+  NODE_COND
 
   NODE_ERROR = -1
 )
 
-type AstNode interface {
-  GetAstNodeType() NodeType
+type AstNodeValue interface {
+  GetNode() *AstNode
+  GetNodeSlice() *[]AstNode
+  GetToken() *Token
 }
 
-type ExpressionNode interface {
-  AstNode
+func (self *AstNode) GetNode() *AstNode {
+  return self
 }
+
+func (self *AstNode) GetNodeSlice() *[]AstNode {
+  return nil
+}
+
+func (self *AstNode) GetToken() *Token {
+  return nil
+}
+
+
+func (self []AstNode) GetNode() *AstNode {
+  return nil
+}
+
+func (self []AstNode) GetNodeSlice() *[]AstNode {
+  return self
+}
+
+func (self []AstNode) GetToken() *Token {
+  return nil
+}
+
+func (self *Token) GetNode() *AstNode {
+  return nil
+}
+
+func (self *Token) GetNodeSlice() *[]AstNode {
+  return nil
+}
+
+func (self *Token) GetToken() *Token {
+  return self
+}
+
+
+type SourceLoc interface {
+  GetSourceFile() string
+  GetLine() string
+}
+
+type AstNode struct {
+  nodetype NodeType
+  line int32
+  col int32
+  left []AstNode
+  mid []AstNode
+  right []AstNode
+}
+
+
+func NewAstNode(t NodeType) *AstNode {
+  result := new(AstNode)
+  result.nodetype = t
+}
+
+// For conditionals, left = cond, mid = then, right = else.

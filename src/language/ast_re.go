@@ -47,11 +47,15 @@ func (self *RegexChoice) GetAstNodeType() NodeType {
 }
 
 type RegexSeq struct {
-  elements []RegexSeq
+  elements []RegexNode
 }
 
-func NewRegexSeq(seq []RegexNode) *RegexSeq {
-  return &RegexSeq{ seq }
+func NewRegexSeq() *RegexSeq {
+  return &RegexSeq{ make([]RegexNode, 0, 10) }
+}
+
+func (self *RegexSeq) AddRegexToSeq(n RegexNode) {
+  self.elements = append(self.elements, n)
 }
 
 func (self *RegexSeq) GetAstNodeType() NodeType {
