@@ -112,13 +112,20 @@ class GapBuffer(initial_size : Int) extends Buffer {
   
   override def get_range(start: Int, end: Int): Array[Char] = {
     if (start > _size) {
-      throw new BufferPositionError(this, start, "Start of requested range past end of buffer")
+      throw new BufferPositionError(
+          this, start,
+        "Start of requested range past end of buffer")
     }
     if (end > _size) {
-      throw new BufferPositionError(this, end, "End of requested range past end of buffer")
+      throw new BufferPositionError(
+        this, end,
+        "End of requested range past end of buffer")
     }
+
     if (end < start) {
-      throw new BufferPositionError(this, end, "End of requested range is greater than start")
+      throw new BufferPositionError(
+          this, end, 
+        "End of requested range is greater than start")
     }
     val size = end - start;
     val result = new Array[Char](end - start)
@@ -151,13 +158,13 @@ class GapBuffer(initial_size : Int) extends Buffer {
     return (line, column)
   }
 
-  ///////////////////////////////////////
+  // -------------------------------
   
   override def move_to(pos: Int) = {
     move_by(pos - _pre)
   }
 
-    // This could really use some optimization.
+  // This could really use some optimization.
   override def move_to_line(line: Int) = {
     move_to(0)
     while (_line < line && _post > 0) {
@@ -171,7 +178,8 @@ class GapBuffer(initial_size : Int) extends Buffer {
   	  val distance = curcol - col
   	  move_by(distance)
   	  if (get_current_column() != col) {
-        throw new BufferPositionError(this, col, "line didn't contain enough columns")
+        throw new BufferPositionError(this, col,
+                                      "line didn't contain enough columns")
   	  }
   	}
   }
@@ -494,21 +502,24 @@ abstract class UndoOperation() {
   def execute()
 }
 
-case class InsertOperation(buf: GapBuffer, pos: Int, len: Int) extends UndoOperation() {
+case class InsertOperation(buf: GapBuffer, pos: Int, len: Int)
+     extends UndoOperation() {
   def execute() {
     buf.move_to(pos)
     buf.delete(len)
   }
 }
 
-case class DeleteOperation(buf: GapBuffer, pos: Int, dels: Array[Char]) extends UndoOperation() {
+case class DeleteOperation(buf: GapBuffer, pos: Int, dels: Array[Char])
+     extends UndoOperation() {
   def execute() {
     buf.move_to(pos)
     buf.insert_chars(dels)
   }
 }
 
-class BufferPositionError(b: GapBuffer, pos: Int, msg: String) extends Exception {
+class BufferPositionError(b: GapBuffer, pos: Int, msg: String)
+    extends Exception {
   val buffer = b
   val requested_position = pos
   val message = msg
