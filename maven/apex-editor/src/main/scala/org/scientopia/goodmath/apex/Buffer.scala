@@ -1,5 +1,8 @@
 package org.scientopia.goodmath.apex
 
+/**
+ * The interface for editor buffers.
+ */
 trait Buffer {
   // cursorless methods: methods that operate on a buffer
   // without any notion of "current point". The underlying
@@ -76,8 +79,20 @@ trait Buffer {
    * Move the cursor to a particular column on the current line.
    */
   def move_to_column(col : Int)
+
+  /**
+   * Move the cursor by a number of lines.
+   */
   def move_by_line(lines : Int)
+
+  /**
+   * Move the cursor by a number of characters.
+   */
   def move_by(char : Int)
+
+  /**
+   * Get the line and column number of the current cursor position.
+   */
   def get_current_line_and_column(): (Int, Int)
   def insert_string(s: String)
   def insert_char(c: Char)
