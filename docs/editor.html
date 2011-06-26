@@ -1,0 +1,341 @@
+<html>
+  <head>
+    <title>Apex Command Language Overview</title>
+  </head>
+  <body>
+
+    <h1>Apex Command Language Overview</h1>
+
+    <p> Lots of people were intrigued by my reference to my editor
+    project. </p>
+    
+    <p> So. The language for my editor is sort of a combination of TECO
+      and Sam. Once the basic system is working, I'm planning on a UI that's
+      modeled on Acme. For now, I'm going to focus on the language.</p>
+
+    
+    <h3>Goals</h3>
+    
+    <p> My goals for the language are:</p>
+    <ol>
+      <li> <b>Conciseness</b>: since I'm planning on using this for all of
+	my everyday programming, it's really important for it to be
+	concise. It doesn't matter if it's easy to read if I need to type
+	something like <code>forall match in regexp.match("foo") do
+	  match.replace("bar") end</code>. It's just too damned much typing
+	for an everyday task. In what I describe below, a global search
+	and replace is <code>g/foo/,{r'bar'}</code>.</li>
+      
+      <li> <b>Consistency</b>: everything works in roughly the same
+	way.  Everything can succeed or fail, and all of the semantics
+	are based around that idea. Everything that takes parameters
+	takes parameters in the same way. If something works in one
+	context, it'll work in another.
+      </li>
+      
+      <li> <b>Clarity</b>: if you look at the code fragments below, this
+	one takes a bit of explanation. The conciseness of the syntax
+	means that to someone who isn't familiar with the language, it's
+	going to be absolutely impossible to read. But the way that things
+	work is straightforward, and so once you understand the basic
+	ideas of the syntax, you can easily read a program. It's not like
+	TECO where you need to know the specific command in order to have
+	a clue of what it does. And the parser can look at an entire
+	program, and tell you before executing any of it whether it's got
+	a syntax error.</li>
+    </ol>
+    
+<h3>Syntax</h3>
+
+<p> The syntax for commands is: </p>
+	
+<pre>
+stmt: sub | command
+	
+sub: 'sub'  sub_params FUN_IDENT sub_params '{' command '}'
+
+sub_params : '(' ( VAR_IDENT ( ',' VAR_IDENT )*  )?  ')' 
+
+command : choice_command ( '?' simple_command ':' simple_command )
+
+choice_command : seq_command ('|' seq_command)*
+	
+seq_command : simple_command ( '.' simple_command )*
+	
+simple_command : atomic_command
+               | '[' command ']'
+
+
+atomic_command: ( params )? command_name ( post_params )?
+	      |  params '!' VAR_IDENT
+
+post_params: post_param (',' post_param)*
+
+post_param: QUOTED_STRING
+          | PATTERN
+          | block
+          | '$(' expr ')'
+	
+params	: NUMERIC_LITERAL
+        | '(' ( expr ( ',' expr )* )? ')'
+	 
+quoted_param: QUOTE_CHAR  ( NON_QUOTE_CHAR )* QUOTE_CHAR
+            | '(' expr ')'
+	
+
+expr : NUMERIC_LITERAL
+     | QUOTED_STRING
+     | funcall
+     | block
+     | command
+     | VAR_IDENT
+
+	
+funcall: params FUN_IDENT ( quoted_param )?
+	
+block : '{' ( '|'  VAR_IDENT (',' VAR_IDENT)*  '|' )?
+            command '}'
+
+FUN_IDENT = '@' [A-Za-z_+-*/=!%^&amp;&gt;&lt;]+
+
+VAR_IDENT = '$' [A-Za-z_]+
+</pre>
+	
+
+<h3>Commands</h3>
+
+<p> This is a language focused on text editing, so the core of it is built
+around buffers. All of the language constructs implicitly work on
+a buffer. Within the buffer, you have a <em>focus</em>. The focus is
+the current location of the cursor. The interesting bit, though, is 
+that the cursor isn't necessarily <em>between</em> two characters. It can
+span over a range of text, all of which is under the cursor. In other words,
+the the currently selected range of text and the cursor are the same thing.</p>
+
+
+<p> Commands all work in terms of either moving the cursor, or modifying the
+contents of the cursor. Most commands have a long name, and a short
+abbreviated name.</p>
+
+<dl>
+  <dt><b>Cursor Motion</b></dt>
+
+  <dd><dl>
+      <dt><b>Pattern Search</b>: <code>s+/pattern/</code></dt>
+      <dd> Moves the cursor so that it covers the next instance of the
+	pattern in the current buffer. Returns the start position of the
+	match. There's also a "s-" version, which looks for the previous
+	instance of the match.</dd>
+  
+      <dt> <b>move</b>: <code><em>number</em> m <em>unit</em></code></dt>
+      <dd> Moves the cursor by a specified distance. The units are 
+	<code>c</code> (for characters), <code>l</code> (for lines),
+	or <code>p</code> (for pages). So <code>3ml</code> means
+	"move the cursor" forward three lines. Returns the start
+	position of the cursor after the move.</dd>
+  
+      <dt> <b>jump</b>: <code><em>number</em> j <em>unit</em></code></dt>
+      <dd> Jumps the cursor to a specific position. The units are the same
+	as for the <code>m</code> command, where "character" units 
+	specify column numbers. Returns the </dd>
+
+      <dt><b>extend</b>: <code>e <em>motion-command</em></code> </dt>
+      <dd> Extend cursor. The cursor is extended by the effect of the
+	following command. So, for example, since <code>3mc</code> is a
+	command that means "move the cursor forward three
+	characters, <code>3emc</code> is a command that means "extend the
+	cursor forward by three characters - it moves the end-point of the
+	cursor forward by three, without changing the
+	start. <code>-3eml</code> adds the previous three lines to the
+	cursor. <code>es+/foo/</code> extends the cursor to include the
+	next match for "foo".</dd>
+
+      <dt><b>pick</b>: <code>(expr, expr)p</code></dt>
+      <dd> Selects a range of text as the current cursor. Each
+	expression is interpreted as a
+	location.  <code>(3lj,4pj)p</code> covers the range from the
+	beginning of the third line, to the end of the fourth page.
+	<code>(s+/foo/, s+/bar/)p</code> covers the range from the beginning
+	of the first match of "foo" to the end of the first match of
+	"bar".</dd>
+      
+      <dt><b>selectall</b>: <code>*</code></dt>
+      <dd> Makes the current cursor cover the entire buffer.</dd>
+    </dl>
+  </dd>
+
+  <dt><b>Edits</b></dt>
+  <dd><dl>
+      <dt><b>delete</b>: <code>d</code></dt>
+      <dd> Delete the contents of the cursor. If it's followed by a variable
+	name, then the deleted text is inserted into that variable.</dd>
+  
+      <dt><b>copy</b>: <code>c$var</code></dt>
+      <dd> Copy the contents of the selection into a variable.</dd>
+  
+      <dt><b>insert</b>: <code>i'text'</code> </dt>
+      <dd> Inserts text <em>before</em> the cursor. The quote character can
+	actually be any character: the first character after an <code>i</code>
+	is the delimiter, and the insert string runs to the next instance
+	of that delimiter.</dd>
+  
+      <dt><b>append</b>: <code>a'text'</code></dt>
+      <dd> Appends text <em>after</em> the cursor. Quotes work just like
+	<code>i</code>.</dd>
+      
+      <dt><b>replace</b>: <code>r'text'</code></dt>
+      <dd> Replaces the current contents of the cursor with the new
+	text.</dd>
+    </dl>
+  </dd>
+
+  <dt><b>Control Flow</b></dt>
+  <dd>
+    <dl>
+      <dt><b>global</b>: <code>g/pattern/,block</code></dt>
+      <dd> A simple loop construct. For each match of the pattern within
+	the current cursor, execute the block. So, for example,
+	to do a global search and replace of foo with bar,
+	<code>* g/foo/,{r'bar'}</code>.</dd>
+
+      <dt><code>stmt ^ stmt</code></dt>
+      <dd> Choice/logical or statement: any statement can either succeed or 
+	fail. <code>^</code> allows you to combine statements so that the 
+	second one only executes if the first one fails. The statement
+	as a whole succeeds if either the first or second statement
+	succeeds. Ret turns the value of the statement that succeeds.</dd>
+      <dt><code>stmt &amp; stmt</dt>
+      <dd> Sequencing/logical and. The second statement will only be executed
+	if the first one succeeds, and the entire statement succeeds only
+	if both succeed. Returns the value of the second statement.</dd>
+      <dt><code>( stmt )</code></dt>
+      <dd> Should be obvious, eh?</dd>
+      <dt><code> stmt1 ? stmt2 : stmt3</code></dt>
+      <dd>If-then-else. A simple if-then without an else is just 
+	a <code>,</code> sequence. You can get an if-then-else effect
+	without this, but it's tricky enough to justify adding this.</dd>
+      <dt><b>loop</b>: <code>l{block}</code></dt>
+      <dd> A general loop. Executes the block over and over as long as it
+	succeeds.</dd>
+      <dt><b>execute</b>: <code>x <em>block</em></code></dt>
+      <dd> Executes the block on the current cursor. The contents of
+	the current cursor becomes the target buffer of the body of the
+	block, and the cursor is set to position 0 of that target buffer.
+      </dd>
+    </dl>
+  </dd>
+
+  <dt><b>Variables</b></dt>
+
+  <dd><dl>
+      <dt><code>$ident</code></dt>
+      <dd> Any symbol starting with a <code>$</code> is a variable. In
+	an expression, a variable name evaluates to its value.</dd>
+  
+      <dt><b>set!</b>: <code>expr!$ident</code></dt>
+      <dd> Assign the result of executing the preceeding expression to a
+	variable. If the variable is already defined in this scope, or in any
+	enclosing scope, update it; otherwise, create a new local variable.</dd>
+    </dl>
+  </dd>
+  
+  <dt><b>External Interaction</b></dt>
+  <dd><dl>
+      <dt><code>&lt;'shellcommand'</code></dt>
+      <dd>Execute <code>shellcommand</code> in an external shell, and
+	insert the standard out from the command into the position at
+	the start of the current cursor; then set the cursor to cover
+	the inserted text.</dd>
+      <dt><code>&lt;&lt;'shellcommand'</code></dt>
+      <dd>Some as the &lt; command, except that it also inserts the contents
+	of stderr from the shell command.</dd>
+
+      <dt><code>|'shellcommand'</code></dt>
+      <dd>Execute <code>shellcommand</code>, with the current cursor as
+	its standard input, and replace the contents of the cursor with
+	the standard output.</dd>
+
+      <dt><code>||'shellcommand'</code></dt>
+      <dd>Same as <code>|</code>, except that it also inserts the contents
+	of stderr.</dd>
+    </dl>
+    </dd>
+
+  <dt><b>I/O</b></dt>
+  <dd>
+    <dl>
+      <dt><b>write</b>: <code>w</code></dt>
+      <dd> Write the current buffer out to a file. If no filename is
+	specified, then use the buffer's associated filename. If a
+	filename is specified, then write it to that file, and update
+	the buffer's filename to match the written name.</dd>
+
+      <dt><b>open</b>: <code>o'filename'</code></dt>
+      <dd> Open a file in a new buffer.</dd>
+
+      <dt><b>revert</b>: <code>v</code></dt>
+      <dd> Discard all changes to this buffer.</dd>
+    </dl>
+  </dd>
+</dl>
+
+<h3>Expressions</h3>
+
+<p> In general, any command is also usable an expression. Every command
+returns a value: motion commands return the new cursor position; edit
+commands return any deleted text, or the size of the change.</p>
+
+<p> Control statements don't depend on true and false values; instead,
+  they're defined in terms of success and failure. Any statement can succeed
+  or fail.</p>
+
+<p> Arithmetic is done using built-in functions.</p>
+
+<h3>Blocks</h3>
+
+<p> A lot of statements take <em>block</em> parameters. A block is
+  an executable code fragment. Blocks are enclosed in braces. They
+  always implicitly take the current cursor as a parameter. In the
+  case of the "x" and "g" commands, the block is executed using
+  the current selection as if it were the entire buffer. In addition
+  to the selection, a block can take additional parameters. They're written
+  by enclosing them in "|"s at the beginning of the block. For example,
+  you could define a block that returned the sum of its parameters
+  by writing:</p>
+
+<pre>
+  {|$x, $y| ($x,$y)@+ }
+</pre>
+
+<p> Parameters for a block <em>preceed</em> its call. So to invoke the 
+block above, you could use: <block>(3,2)x{|x,y| (x,y)@+)}</block>, which
+would then return 5.</p>
+
+<p> Blocks are lexically scoped; a block declared inside of another block
+can access variables from that enclosing block.  </p>
+
+<p> You can declare named subroutine. A named subroutine is mostly
+syntactic sugar  for a block. The main difference is that if you go to
+the trouble of creating a named subroutine, then you can declare both
+prefix and postfix parameters.  The names of named subroutines always start with an "@" symbols. A named subroutine just associates a
+ global name with a block. </p>
+
+<pre>
+  fun ($x) @fact {(x,0)@= ? {1} : { (x, (x,1)@-@fact)@* }
+</pre>
+  
+<p> When calling a block, the parameters preceed it. So to get the
+  factorial of 10, you'd write <code>10@fact</code>.</p>
+
+<p> For numeric arguments to commands, you can just put the expression
+  before the command instead of a number. For example, to move to line
+  fact(4), you'd write: <code>4@fact jl</code>. For string parameters
+  that appear in quoted positions, if you use an "$()" instead of a quote
+  character, then the contents are evaluated as an expression, and the
+  result is used as the string parameter value. So to insert
+  the <em>string</em> "5@fact", you could
+  write <code>i'5@fact'</code>. To insert the result of evaluating it,
+  you'd write "<code>i$(5@fact)</code>".</p>
+
+</body>
+</html>

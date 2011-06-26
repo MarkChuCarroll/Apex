@@ -1,0 +1,11 @@
+Needed commands for displaying text:
+
+- ClearAll()
+- ClearToEndOfLine()
+- MoveCursorTo(int line, int col)
+- DrawText(string)
+
+- void TextPositionFromPixelPosition(int pixelX, int pixelY,
+       				     int* textX, int* textY)
+
+
