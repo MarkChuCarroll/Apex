@@ -14,132 +14,67 @@
 
 package org.scientopia.goodmath.apex
 
-/**
- * The interface for editor buffers.
- */
-trait Buffer {
+class GapBuffer(initial_size : Int) extends Buffer {
+
   // cursorless methods: methods that operate on a buffer
   // without any notion of "current point". The underlying
   // implementation still uses a cursor, and these methods do
   // *not* guarantee that the cursor will be unchanged.
-	
+
   /**
    * Get the number of characters in this buffer.
    * @return the number of characters
-   */
-  def length: Int
-  
+   */	
+  def length(): Int = _pre + _post
+
   /**
    * Insert a string at an index
    * @param pos the character index where the insert should be performed
    * @param str a string containing the characters to insert
    */
-  def insert_string_at(pos: Int, str: String)
-  
+  def insert_string_at(pos: Int, str: String) {
+    move_to(pos)
+    insert_string(str)
+  }
+
   /**
    * Insert a single character.
    * @param pos the character index where the insert should be performed
    * @param c the character to insert
    */
-  def insert_char_at(pos: Int, c: Char)
-  
+  def insert_char_at(pos: Int, c: Char) {
+    move_to(pos)
+    insert_char(c)
+  }
+
   /**
    * Insert an array of characters.
    * @param pos the character index where the insert should be performed
    * @param c the character to insert
    */
-  def insert_chars_at(pos: Int, cs: Array[Char])
-  
+  def insert_chars_at(pos: Int, cs: Array[Char]) {
+    move_to(pos)
+    insert_chars(cs)
+  }
+
   /**
    * Delete a range of characters.
    * @param start the character index of the beginning of the range to delete 
    * @param end the character index of the end of the range to delete
    * @return an array containing the delete characters.
-   */
-  def delete_range(start: Int, end: Int): Array[Char]
-  
+   */  
+  def delete_range(start: Int, end: Int): Array[Char] = {
+    move_to(start)
+    delete(end - start)
+  }
+
   /**
    * Retrieve a range of characters.
    * @param start the character index of the start of the range
    * @param end the character index of the end of the range
    * @return an array containing the characters in the range
    */
-  def get_range(start: Int, end: Int): Array[Char]
-  
-  /**
-   * Convert a line/column to a character index.
-   * 
-   */
-  def get_position(linenum: Int, colnum: Int): Int
-  
-  /**
-   * Convert a character index to line/column
-   */
-  def get_line_and_column(pos: Int): (Int, Int)
-
-  // The cursored operations. These all work by specifying positions and
-  // distances relative to a particular position.
-  /**
-   * move the cursor to a character index.
-   */
-  def move_to(pos: Int)
-  
-  /**
-   * Move the cursor to the beginning of a line
-   */
-  def move_to_line(line : Int)
-  
-  /**
-   * Move the cursor to a particular column on the current line.
-   */
-  def move_to_column(col : Int)
-
-  /**
-   * Move the cursor by a number of lines.
-   */
-  def move_by_line(lines : Int)
-
-  /**
-   * Move the cursor by a number of characters.
-   */
-  def move_by(char : Int)
-
-  /**
-   * Get the line and column number of the current cursor position.
-   */
-  def get_current_line_and_column(): (Int, Int)
-  def insert_string(s: String)
-  def insert_char(c: Char)
-  def insert_chars(cs: Array[Char])
-  def delete(numChars: Int): Array[Char]
-  def char_at(pos: Int): Char
-}
-
-class GapBuffer(initial_size : Int) extends Buffer {
-	
-  override def length(): Int = _pre + _post
-
-  override def insert_string_at(pos: Int, str: String) {
-    move_to(pos)
-    insert_string(str)
-  }
-
-  override def insert_char_at(pos: Int, c: Char) {
-    move_to(pos)
-    insert_char(c)
-  }
-
-  override def insert_chars_at(pos: Int, cs: Array[Char]) {
-    move_to(pos)
-    insert_chars(cs)
-  }
-  
-  override def delete_range(start: Int, end: Int): Array[Char] = {
-    move_to(start)
-    delete(end - start)
-  }
-  
-  override def get_range(start: Int, end: Int): Array[Char] = {
+  def get_range(start: Int, end: Int): Array[Char] = {
     if (start > _size) {
       throw new BufferPositionError(
           this, start,
@@ -164,13 +99,20 @@ class GapBuffer(initial_size : Int) extends Buffer {
     return result
   }
 
-  override def get_position(linenum: Int, colnum: Int): Int = {
+  /**
+   * Convert a line/column to a character index.
+   * 
+   */
+  def get_position(linenum: Int, colnum: Int): Int = {
 	  move_to_line(linenum)
 	  move_to_column(colnum)
 	  get_position()
   }
-  
-  override def get_line_and_column(pos: Int): (Int, Int) = {
+
+  /**
+   * Convert a character index to line/column
+   */
+  def get_line_and_column(pos: Int): (Int, Int) = {
     if (pos > _size) {
       throw new BufferPositionError(this, pos, "Position past end of buffer")
     }
@@ -188,37 +130,56 @@ class GapBuffer(initial_size : Int) extends Buffer {
   }
 
   // -------------------------------
-  
-  override def move_to(pos: Int) = {
+  // The cursored operations. These all work by specifying positions and
+  // distances relative to a particular position.
+
+  /**
+   * move the cursor to a character index.
+   */
+  def move_to(pos: Int) = {
     move_by(pos - _pre)
   }
 
-  // This could really use some optimization.
-  override def move_to_line(line: Int) = {
+
+  /**
+   * Move the cursor to the beginning of a line
+   */
+  def move_to_line(line: Int) = {
+    // This could really use some optimization.
     move_to(0)
     while (_line < line && _post > 0) {
       advance_cursor
     }
   }
   
-  override def move_to_column(col : Int) = {
-  	val curcol = get_current_column()
-  	if (curcol > col) {
-  	  val distance = curcol - col
-  	  move_by(distance)
-  	  if (get_current_column() != col) {
+  /**
+   * Move the cursor to a particular column on the current line.
+   */
+  def move_to_column(col : Int) = {
+  	 val curcol = get_current_column()
+  	 if (curcol > col) {
+  	   val distance = curcol - col
+  	   move_by(distance)
+  	   if (get_current_column() != col) {
         throw new BufferPositionError(this, col,
                                       "line didn't contain enough columns")
-  	  }
-  	}
+  	   }
+  	 }
   }
-  
+
+  /**
+   * Move the cursor by a number of lines.
+   */  
   def move_by_line(l : Int) = {
     val (line, col) = get_current_line_and_column()
     move_to_line(line + l)
   }
   
-  override def move_by(distance: Int) = {
+
+  /**
+   * Move the cursor by a number of characters.
+   */
+  def move_by(distance: Int) = {
     if (distance > 0) {
       for (i <- 0 until distance) {
         advance_cursor
@@ -230,57 +191,45 @@ class GapBuffer(initial_size : Int) extends Buffer {
     }
   }
   
-  override def get_current_line_and_column(): (Int, Int) = {
+  /**
+   * Get the line and column number of the current cursor position.
+   */
+  def get_current_line_and_column(): (Int, Int) = {
     return (get_current_line(), get_current_column())
   }
   
-  override def insert_string(str: String) = {
+  /**
+   * Insert a string at the current cursor position.
+   */
+  def insert_string(str: String) = {
     val undo = InsertOperation(this, _pre, str.length)
     push_undo(undo)
     str foreach prim_insert_char
   }
 
-  override def insert_char(c: Char) = {
+  /**
+   * Insert a character at the current cursor position.
+   */
+  def insert_char(c: Char) = {
     val undo = InsertOperation(this, _pre, 1);
     prim_insert_char(c);
     push_undo(undo);
   }
 
-  override def insert_chars(cs: Array[Char]) = {
+  /**
+   * Insert an array of characters at the current cursor position.
+   */
+  def insert_chars(cs: Array[Char]) = {
     val undo = InsertOperation(this, _pre, cs.length)
     push_undo(undo)
     for (c <- cs)
       prim_insert_char(c)
   }
   
-  def prim_insert_char(c: Char) = {
-    push_pre(c)
-    forward_update_position(c)
-  }
-
-  
   /**
-   * For any method that moves the cursor forward - whether by inserting or
-   * by simple cursor motion - update the line and column positions. 
+   * Get the character at a position.
    */
-  private def forward_update_position(c: Char) = {
-    if (c == '\n') {
-      _line += 1
-      _column = 0
-    } else {
-      _column += 1
-    }
-  }
-
-  private def advance_cursor = {
-    if (_post > 0) {
-      val c = pop_post()
-      push_pre(c)
-      forward_update_position(c)
-    }
-  }
-
-  override def char_at(pos: Int): Char = {
+  def char_at(pos: Int): Char = {
     if (pos < 0 || pos >= _size) {
       return 0
     }
@@ -295,29 +244,6 @@ class GapBuffer(initial_size : Int) extends Buffer {
     return c
   }
 
-  /**
-   * For any operation that steps the cursor backward, update the
-   * line and column positions.
-   */
-  private def reverse_update_position(c: Char) = {
-    if (_line == 1) {
-      _column = _pre
-    } else if (c == '\n') {
-      _line -= 1
-      // Look back to either the beginning of the buffer, or the previous
-      // newline. The distance from there to the current position is the
-      // current column number. (Not sure if this works correctly on the first
-      // line.
-      var i = 0
-      while ((_pre - i - 1) > 0 && _prechars(_pre - i - 1) != '\n') {
-        i += 1
-      }
-      _column = i
-    } else {
-      _column -= 1
-    }
-  }
-
   def delete_char_backwards() = {
     if (_pre > 0) {
       val pos = _pre
@@ -328,6 +254,12 @@ class GapBuffer(initial_size : Int) extends Buffer {
     }
   }
 
+  /**
+   * Delete a string of characters starting at the current cursor
+   * position. If the number of characters to delete is negative, it will
+   * delete characters behind the cursor.
+   * @return the deleted characters.
+   */
   def delete(s: Int): Array[Char] = {
     if (s == 0) {
       return null
@@ -354,6 +286,9 @@ class GapBuffer(initial_size : Int) extends Buffer {
     }
   }
 
+  /**
+   * copy a range of characters starting at the current cursor position.
+   */
   def copy(size: Int): Array[Char] = {
     if (size == 0) {
       return null
@@ -376,50 +311,6 @@ class GapBuffer(initial_size : Int) extends Buffer {
       result(i) = char_at(startpos + i)
     }
     return result
-  }
-
-  def retreat_cursor = {
-    if (_pre > 0) {
-      val c = pop_pre()
-      push_post(c)
-      reverse_update_position(c)
-    }
-  }
-
-  
-  def move_by_lines(lines : Int) = {
-	if (lines > 0) {
-	  val targetLine = get_current_line() + lines
-      while (_post > 0 && get_current_line() != targetLine) {
-    	  advance_cursor
-      }
-	} else {
-      val targetLine = get_current_line() - lines
-      while (_pre > 0 && get_current_line() != targetLine) {
-        retreat_cursor
-	  }
-	}  
-  }
-
-
-  def check_capacity() = {
-    if ((_pre + _post) >= _size) {
-      expand_capacity(2 * _size)
-    }
-  }
-
-  def expand_capacity(newsize: Int) = {
-    val newpre = new Array[Char](newsize)
-    val newpost = new Array[Char](newsize)
-    for (i <- 0 until _pre) {
-      newpre(i) = _prechars(i)
-    }
-    for (i <- 0 until _post) {
-      newpost(newsize - i) = _postchars(_size - i)
-    }
-    _prechars = newpre
-    _postchars = newpost
-    _size = newsize
   }
 
   def get_current_column() = _column
@@ -515,7 +406,113 @@ class GapBuffer(initial_size : Int) extends Buffer {
     result += "}"
     result
   }
+
+
+  // --------------------------------
+  // Input and output
+
+  def write_to_file(file : java.io.File) = {
+    if (file.exists()) {
+      // if there's already a backup file, delete it, and then rename
+      // the current version to the backup.
+      val backup = new java.io.File(file.getPath() + ".BAK")
+      if (backup.exists()) {
+        backup.delete()
+      }
+      file.renameTo(backup)
+    }
+    val buffer_contents = new Array[Char](length())
+    for (i <- 0 until length()) {
+      buffer_contents(i) = char_at(i)
+    }
+    val out = new java.io.FileWriter(file)
+    out.write(buffer_contents)
+    out.close()    
+  }
+
+  // --------------------------------
+  // Primitives
+
+  private def retreat_cursor = {
+    if (_pre > 0) {
+      val c = pop_pre()
+      push_post(c)
+      reverse_update_position(c)
+    }
+  }
   
+  private def check_capacity() = {
+    if ((_pre + _post) >= _size) {
+      expand_capacity(2 * _size)
+    }
+  }
+
+  def expand_capacity(newsize: Int) = {
+    val newpre = new Array[Char](newsize)
+    val newpost = new Array[Char](newsize)
+    for (i <- 0 until _pre) {
+      newpre(i) = _prechars(i)
+    }
+    for (i <- 0 until _post) {
+      newpost(newsize - i) = _postchars(_size - i)
+    }
+    _prechars = newpre
+    _postchars = newpost
+    _size = newsize
+  }
+
+  private def prim_insert_char(c: Char) = {
+    push_pre(c)
+    forward_update_position(c)
+  }
+  
+  /**
+   * For any method that moves the cursor forward - whether by inserting or
+   * by simple cursor motion - update the line and column positions. 
+   */
+  private def forward_update_position(c: Char) = {
+    if (c == '\n') {
+      _line += 1
+      _column = 0
+    } else {
+      _column += 1
+    }
+  }
+
+  private def advance_cursor = {
+    if (_post > 0) {
+      val c = pop_post()
+      push_pre(c)
+      forward_update_position(c)
+    }
+  }
+
+  /**
+   * For any operation that steps the cursor backward, update the
+   * line and column positions.
+   */
+  private def reverse_update_position(c: Char) = {
+    if (_line == 1) {
+      _column = _pre
+    } else if (c == '\n') {
+      _line -= 1
+      // Look back to either the beginning of the buffer, or the previous
+      // newline. The distance from there to the current position is the
+      // current column number. (Not sure if this works correctly on the first
+      // line.
+      var i = 0
+      while ((_pre - i - 1) > 0 && _prechars(_pre - i - 1) != '\n') {
+        i += 1
+      }
+      _column = i
+    } else {
+      _column -= 1
+    }
+  }
+
+  // -------------------------
+  // The fields
+
   var _prechars = new Array[Char](initial_size)
   var _postchars = new Array[Char](initial_size)
   var _size = initial_size
