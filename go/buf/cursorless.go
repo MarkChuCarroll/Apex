@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// File: query.go
+// File: cursorless.go
 // Author: Mark Chu-Carroll <markcc@gmail.com>
-// Description: Implementation of the query methods - that is,
-//   the methods that retrieve things from the buffer without
-//   altering its state.
+// Description: Implementation of the cursorless methods - that is,
+//   the methods that operate on the buffer by fully specifying
+//   the locations at which things should be done, rather than relying
+//   on a cursor point.
 
 package buf
 
@@ -160,4 +161,12 @@ func (self *GapBuffer) Bytes() []uint8 {
     result = append(result, self.postchars[i-1])
   }
   return result
+}
+
+func (self *GapBuffer) AllText() []uint8 {
+  len := self.Length()
+  text := make([]uint8, len)
+  for i := 0; i < len; i++ {
+    text[i] = self.GetCharAt(i)
+  }
 }

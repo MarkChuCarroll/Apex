@@ -6,8 +6,9 @@ GOFILES=\
 	interface.go\
 	prim.go\
 	edit.go\
-	query.go\
+	cursorless.go\
 	io.go\
+	undo.go\
 
 
 include $(GOROOT)/src/Make.pkg

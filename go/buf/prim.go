@@ -31,8 +31,6 @@ type GapBuffer struct {
   column     int
   undo_stack *vector.Vector
   undoing    bool
-  dirty      bool
-  filename   string	
 }
 
 // Create a new gap buffer with a specified capacity.
@@ -132,3 +130,52 @@ func (self *GapBuffer) PeekPost() (result uint8) {
   }
   return
 }
+
+func (self *GapBuffer) StepCursorForward() ResultCode {
+  if self.PostLength() > 0 {
+    c := self.PopPost()
+    self.PushPre(c)
+    if c == '\n' {
+      self.line++
+      self.column = 0
+    }
+  } else if self.PostLength() == 0 {
+    return PAST_END
+  }
+  return SUCCEEDED
+}
+
+func (self *GapBuffer) StepCursorBackward() ResultCode {
+  if self.PreLength() > 0 {
+    c := self.PopPre()
+    self.PushPost(c)
+    if c == '\n' {
+      self.line--
+      i := 1
+      for i < self.PreLength() && self.prechars[self.PreLength()-i] != '\n' {
+        i++
+      }
+      self.column = i - 1
+    } else {
+      self.column--
+      if self.column < 0 {
+        return BEFORE_START
+      }
+    }
+  }
+  return SUCCEEDED
+}
+
+func (self *GapBuffer) countCurrentColumn() int {
+  pos := self.PreLength() - 1
+  column := int(0)
+  // Count the number of characters going back until
+  // you hit either a newline, or the beginning of a file.
+  for self.prechars[pos] != '\n' && pos > 0 {
+    column++
+    pos--
+  }
+  return column
+}
+
+

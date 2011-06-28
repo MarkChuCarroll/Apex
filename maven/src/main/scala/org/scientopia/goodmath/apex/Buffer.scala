@@ -27,6 +27,11 @@ class GapBuffer(initial_size : Int) extends Buffer {
    */	
   def length(): Int = _pre + _post
 
+  def clear() = {
+    _pre = 0
+    _post = 0
+  }
+
   /**
    * Insert a string at an index
    * @param pos the character index where the insert should be performed
@@ -96,7 +101,7 @@ class GapBuffer(initial_size : Int) extends Buffer {
     for (i <- 0 until size) {
       result(i) = char_at(start + i)
     }
-    return result
+    result
   }
 
   /**
@@ -126,7 +131,7 @@ class GapBuffer(initial_size : Int) extends Buffer {
         column = column + 1
       }
     }
-    return (line, column)
+    (line, column)
   }
 
   // -------------------------------
@@ -194,9 +199,8 @@ class GapBuffer(initial_size : Int) extends Buffer {
   /**
    * Get the line and column number of the current cursor position.
    */
-  def get_current_line_and_column(): (Int, Int) = {
-    return (get_current_line(), get_current_column())
-  }
+  def get_current_line_and_column(): (Int, Int) =
+    (get_current_line(), get_current_column())
   
   /**
    * Insert a string at the current cursor position.
@@ -408,26 +412,19 @@ class GapBuffer(initial_size : Int) extends Buffer {
   }
 
 
-  // --------------------------------
-  // Input and output
-
-  def write_to_file(file : java.io.File) = {
-    if (file.exists()) {
-      // if there's already a backup file, delete it, and then rename
-      // the current version to the backup.
-      val backup = new java.io.File(file.getPath() + ".BAK")
-      if (backup.exists()) {
-        backup.delete()
-      }
-      file.renameTo(backup)
-    }
+  def get_contents() : Array[Char] = {
     val buffer_contents = new Array[Char](length())
     for (i <- 0 until length()) {
       buffer_contents(i) = char_at(i)
     }
-    val out = new java.io.FileWriter(file)
-    out.write(buffer_contents)
-    out.close()    
+    buffer_contents
+  }
+
+  def read_from_file(file : File) {
+    clear()
+    val in = new BufferedSource(new FileInputStream(file))
+    in.getLines() foreach(line => insert_string(line + '\n'))
+    in.close()
   }
 
   // --------------------------------

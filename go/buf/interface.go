@@ -46,10 +46,11 @@ const (
 // accessing text buffers. It's agnostic about what the underlying
 // implementation is: it provides both stateless access methods and
 // cursor-based accessors.
-type EditBuffer interface {
+type Buffer interface {
 	// stateless interface methods
 	Length() int
-	Clear() 
+	Clear()
+	AllText() []uint8
 	DeleteRange(start int, end int) ([]uint8, ResultCode) 
 	InsertStringAt(pos int, s string)
 	InsertCharsAt(pos int, cs []uint8)
@@ -73,6 +74,7 @@ type EditBuffer interface {
 	InsertString(s string)
 	Cut(numChars int) ([]uint8, ResultCode)
 	Copy(numChars int) ([]uint8, ResultCode)
+	
 }
 
 type UndoOperation interface {

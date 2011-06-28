@@ -14,7 +14,7 @@
 
 // File: edit.go
 // Author: Mark Chu-Carroll <markcc@gmail.com>
-// Description: Implemenation of the edit methods.
+// Description: Edit operations that work with the buffer cursor.
 
 package buf
 
@@ -37,11 +37,6 @@ func (self *GapBuffer) primInsertChar(c uint8, record_undo bool) {
   }
 }
 
-// This may look inefficient - but since we
-// need to walk through the string looking for
-// newlines in order to keep the line and column
-// markers correct, it's actually about as good as
-// you can really get.
 func (self *GapBuffer) InsertChars(cs []uint8) {
   self.dirty = true
   pos := self.PreLength()
@@ -64,20 +59,6 @@ func (self *GapBuffer) InsertString(s string) {
     undo := RecordInsert(self, pos, len(s))
     self.pushUndo(undo)
   }
-}
-
-func (self *GapBuffer) StepCursorForward() ResultCode {
-  if self.PostLength() > 0 {
-    c := self.PopPost()
-    self.PushPre(c)
-    if c == '\n' {
-      self.line++
-      self.column = 0
-    }
-  } else if self.PostLength() == 0 {
-    return PAST_END
-  }
-  return SUCCEEDED
 }
 
 func (self *GapBuffer) MoveCursorTo(pos int) (result ResultCode) {
@@ -109,39 +90,6 @@ func (self *GapBuffer) MoveCursorBy(dist int) (result ResultCode) {
     }
   }
   return SUCCEEDED
-}
-
-func (self *GapBuffer) StepCursorBackward() ResultCode {
-  if self.PreLength() > 0 {
-    c := self.PopPre()
-    self.PushPost(c)
-    if c == '\n' {
-      self.line--
-      i := 1
-      for i < self.PreLength() && self.prechars[self.PreLength()-i] != '\n' {
-        i++
-      }
-      self.column = i - 1
-    } else {
-      self.column--
-      if self.column < 0 {
-        return BEFORE_START
-      }
-    }
-  }
-  return SUCCEEDED
-}
-
-func (self *GapBuffer) countCurrentColumn() int {
-  pos := self.PreLength() - 1
-  column := int(0)
-  // Count the number of characters going back until
-  // you hit either a newline, or the beginning of a file.
-  for self.prechars[pos] != '\n' && pos > 0 {
-    column++
-    pos--
-  }
-  return column
 }
 
 func (self *GapBuffer) MoveToLine(linenum int) (result ResultCode) {
@@ -242,75 +190,9 @@ func (self *GapBuffer) Copy(dist int) (copybuf []uint8, result ResultCode) {
   return
 }
 
-func (self *GapBuffer) Undo() ResultCode {
-  self.undoing = true
-  undo := self.undo_stack.Pop().(UndoOperation)
-  code := undo.Undo()
-  self.undoing = false
-  return code
-}
-
 func (self *GapBuffer) GetCurrentPosition() int { return len(self.prechars) }
 
 func (self *GapBuffer) GetCurrentLine() int { return self.line }
 
 func (self *GapBuffer) GetCurrentColumn() int { return self.column }
 
-func RecordInsert(b *GapBuffer, start int, length int) (result *InsertOperation) {
-  result = &InsertOperation{b, start, length}
-  return
-}
-
-func RecordDelete(b *GapBuffer, pos int, chars []uint8) (result *DeleteOperation) {
-  result = &DeleteOperation{b, pos, chars}
-  return
-}
-
-func (self *InsertOperation) GetBuffer() EditBuffer {
-  return self.buf
-}
-
-func (self *InsertOperation) Undo() ResultCode {
-  self.buf.MoveCursorTo(self.start)
-  _, status := self.buf.Cut(int(self.length))
-  return status
-}
-
-
-func (self *DeleteOperation) GetBuffer() EditBuffer {
-  return self.buf
-}
-
-func (self *DeleteOperation) Undo() (result ResultCode) {
-  result = self.buf.MoveCursorTo(self.position)
-  if result != SUCCEEDED {
-    return result
-  }
-  self.buf.InsertChars(self.chars)
-  result = SUCCEEDED
-  return
-}
-
-//
-// Undo-record types
-//
-
-
-// A basic insert operation
-type InsertOperation struct {
-  buf    *GapBuffer
-  start  int
-  length int
-}
-
-
-// A cut operation.
-type DeleteOperation struct {
-  buf      *GapBuffer
-  position int
-  chars    []uint8
-}
-
-func (self *GapBuffer) pushUndo(u UndoOperation) {
-  self.undo_stack.Push(u)
-}
