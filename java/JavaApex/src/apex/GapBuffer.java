@@ -1,7 +1,25 @@
+// Copyright 2011 Mark C. Chu-Carroll
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package apex;
 
 import java.util.Stack;
 
+/**
+ * An editor buffer implementation based on the gap buffer model.
+ * 
+ * @author markcc
+  */
 public class GapBuffer {
    private char[] _pre;
    private char[] _post;
@@ -12,6 +30,10 @@ public class GapBuffer {
    boolean _undoing = false;
    private Stack<UndoOperation> _undo = new Stack<UndoOperation>();
 
+   /**
+    * Create a new gapbuffer.
+    * @param size the initial size of the buffer.
+    */
    public GapBuffer(int size) {
       _pre = new char[size];
       _post = new char[size];
@@ -21,6 +43,9 @@ public class GapBuffer {
       _column = 0;
    }
 
+   /**
+    * Clear the contents of a buffer.
+    */
    public void clear() {
       _prepos = 0;
       _postpos = 0;
@@ -28,10 +53,14 @@ public class GapBuffer {
       _column = 0;
    }
 
+   /**
+    * Insert a string into the buffer at the current cursor position.
+    * @param s
+    */
    public void insert(String s) {
       int pos = currentPosition();
       for (int i = 0; i < s.length(); i++) {
-         insertChar(s.charAt(i), false);
+         internalInsertChar(s.charAt(i), false);
       }
       if (!_undoing) {
          UndoOperation undo = new UndoInsert(pos, s.length());
@@ -39,10 +68,15 @@ public class GapBuffer {
       }
    }
    
+   /**
+    * Insert an array of characters into the buffer at the current cursor
+    * position.
+    * @param chars
+    */
    public void insertChars(char[] chars) {
       int pos = currentPosition();
       for (int i = 0; i < chars.length; i++) {
-         insertChar(chars[i]);
+         internalInsertChar(chars[i], false);
       }
       if (!_undoing) {
          UndoOperation undo = new UndoInsert(pos, chars.length);
@@ -50,11 +84,22 @@ public class GapBuffer {
       }
    }
    
+   /**
+    * Insert a single character at the current cursor position.
+    * @param c
+    */
    public void insertChar(char c) {
-      insertChar(c, true);
+      internalInsertChar(c, true);
    }
 
-   public void insertChar(char c, boolean recordUndo) {
+   /**
+    * Insert a character at the current cursor position. This is an internal method,
+    * not for use by clients. It provides the capability to prevent generating an
+    * undo record for the insert 
+    * @param c
+    * @param recordUndo if  false, don't record the insertion for undo.
+    */
+   private void internalInsertChar(char c, boolean recordUndo) {
       if (recordUndo && !_undoing) {
          UndoOperation undo = new UndoInsert(currentPosition(), 1);
          _undo.push(undo);
@@ -73,14 +118,21 @@ public class GapBuffer {
       moveBy(distance);
    }
 
-   public int moveToLine(int line) {
+   /**
+    * Move the cursor to the first character of a line.
+    * @param line
+    */
+   public void moveToLine(int line) {
       moveTo(0);
       while (_postpos > 0 && _line < line) {
          stepForward();
       }
-      return _prepos;
    }
 
+   /**
+    * Move the cursor by a distance.
+    * @param dist
+    */
    public void moveBy(int dist) {
       if (dist > 0) {
          if (dist > _postpos) {
@@ -100,6 +152,10 @@ public class GapBuffer {
       }
    }
 
+   /**
+    * Move the cursor by a distance specified in lines.
+    * @param numLines
+    */
    public void moveByLine(int numLines) {
       int targetLine = _line + numLines;
       moveToLine(targetLine);
@@ -130,6 +186,12 @@ public class GapBuffer {
       return result;
    }
 
+   /**
+    * Copy a region of text starting at the cursor point.
+    * @param len the length of the region to copy. This must be
+    *   greater than 0.
+    * @return the copied text.
+    */
    public char[] copy(int len) {
       if (len < 0) {
          throw new IllegalArgumentException("copy length must not be negative");
@@ -144,6 +206,11 @@ public class GapBuffer {
       return result;      
    }
    
+   /**
+    * Retrieve the character at a position.
+    * @param pos
+    * @return
+    */
    public char charAt(int pos) {
       if (pos < 0) {
          throw new IllegalArgumentException("character index must be >= 0");
@@ -158,6 +225,10 @@ public class GapBuffer {
       }
    }
    
+   /**
+    * Get the current length of the text in the buffer.
+    * @return
+    */
    public int length() {
       return _prepos + _postpos;
    }
