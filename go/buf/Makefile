@@ -5,8 +5,6 @@ TARG=buf
 GOFILES=\
 	interface.go\
 	prim.go\
-	edit.go\
-	cursorless.go\
 	io.go\
 	undo.go\
 

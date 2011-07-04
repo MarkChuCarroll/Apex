@@ -24,17 +24,11 @@ import (
   "os"
 )
 
-type IFileManager interface {
-  // Open a file in a new buffer. |filename| should not be open in a buffer
-  // yet.
-  OpenBuffer(filename string, create bool) (buf *Buffer, status ResultCode, msg string)
-}
 
-type FileManager struct {
+
+type FileManagerImpl struct {
   buffers map[string] *Buffer
 }
-
-
 
 func fileExists(filename string) bool {
   fi, err := os.Stat(filename)
@@ -64,3 +58,26 @@ func (self *GapBuffer) Write() ResultCode {
   self.dirty = false
   return SUCCEEDED
 }
+
+func (self *GapBuffer) Read() (code ResultCode, err string) {
+  code, err = self.ReadFrom(self.filename)
+  return
+}
+
+func (self *GapBuffer) ReadFrom(filename string) (code ResultCode, err string) {
+  self.Clear()
+  contents, oserr := ioutil.ReadFile(filename)
+  if oserr != nil {
+	// TODO: need more specific errors - use os.Error code
+	// to generate some more specific error description.
+	err = "OS Error reading file"
+	code = IO_ERROR
+	return
+  } else {
+    self.InsertChars(contents)
+  }
+  code = SUCCEEDED
+  err = ""
+  return
+}
+

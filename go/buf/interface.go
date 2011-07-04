@@ -75,10 +75,20 @@ type Buffer interface {
 	InsertString(s string)
 	Cut(numChars int) ([]uint8, ResultCode)
 	Copy(numChars int) ([]uint8, ResultCode)
-	
+
+	Write(backup bool) (err ResultCode, msg string)
+	WriteTo(filename string, overwrite bool) (err ResultCode, msg string)
+	Read() (err ResultCode, msg string)
+	RenameTo(filename string, overwrite bool) (err ResultCode, msg string)
 }
 
 type UndoOperation interface {
   Undo() ResultCode
 }
 
+type FileManager interface {
+  // Open a file in a new buffer. |filename| should not be open in a buffer
+  // yet.
+  OpenBuffer(filename string, create bool) (buf Buffer, status ResultCode, msg string)
+  GetBuffer(filename string) Buffer
+}
