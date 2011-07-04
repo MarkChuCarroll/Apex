@@ -40,6 +40,7 @@ const (
   INVALID_LINE
   INVALID_COLUMN
   IO_ERROR
+  NOT_FOUND
 )
 
 // A generic buffer interface. This is the primitive API for

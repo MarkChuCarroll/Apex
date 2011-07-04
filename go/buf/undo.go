@@ -44,7 +44,7 @@ func RecordInsert(b *GapBuffer, start int, length int) (result *InsertOperation)
 }
 
 
-func (self *InsertOperation) GetBuffer() EditBuffer {
+func (self *InsertOperation) GetBuffer() *GapBuffer {
   return self.buf
 }
 
@@ -67,7 +67,7 @@ func RecordDelete(b *GapBuffer, pos int, chars []uint8) (result *DeleteOperation
   return
 }
 
-func (self *DeleteOperation) GetBuffer() EditBuffer {
+func (self *DeleteOperation) GetBuffer() *GapBuffer {
   return self.buf
 }
 

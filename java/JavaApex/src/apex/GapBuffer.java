@@ -415,6 +415,17 @@ public class GapBuffer {
       return result.toString();
    }
    
+   public String allText() {
+      StringBuilder result = new StringBuilder();
+      for (int i = 0; i < _prepos; i++) {
+         result.append(_pre[i]);
+      }
+      for (int i = 0; i < _postpos; i++) {
+         result.append(_post[_postpos - i - 1]);
+      }
+      return result.toString();
+   }
+   
    interface UndoOperation { 
       void execute();
    }

@@ -21,6 +21,7 @@ package buf
 
 import (
 	"container/vector"
+	"io/ioutil"
 	"os"
 )
 
@@ -31,6 +32,8 @@ type GapBuffer struct {
   column     int
   undo_stack *vector.Vector
   undoing    bool
+  dirty		 bool
+  filename	 string
 }
 
 // Create a new gap buffer with a specified capacity.
@@ -47,6 +50,7 @@ func NewBuffer(size int) *GapBuffer {
   return result
 }
 
+// TODO: this should be replaced by FileManager.OpenFile
 func NewFileBuffer(filename string) (buf *GapBuffer, result ResultCode) {
   stat, err := os.Stat(filename)
   if err != nil {
@@ -55,7 +59,7 @@ func NewFileBuffer(filename string) (buf *GapBuffer, result ResultCode) {
   } else {
 	buf = NewBuffer(int(stat.Size) * 2)
 	buf.filename = filename
-	result = buf.Read()
+	result, _ = buf.Read()
   }
   return
 }
@@ -178,4 +182,24 @@ func (self *GapBuffer) countCurrentColumn() int {
   return column
 }
 
+func (self *GapBuffer) Read() (code ResultCode, err string) {
+  code, err = self.ReadFrom(self.filename)
+  return
+}
 
+func (self *GapBuffer) ReadFrom(filename string) (code ResultCode, err string) {
+  self.Clear()
+  contents, oserr := ioutil.ReadFile(filename)
+  if oserr != nil {
+	// TODO: need more specific errors - use os.Error code
+	// to generate some more specific error description.
+	err = "OS Error reading file"
+	code = IO_ERROR
+	return
+  } else {
+    self.InsertChars(contents)
+  }
+  code = SUCCEEDED
+  err = ""
+  return
+}

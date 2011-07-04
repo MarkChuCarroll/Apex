@@ -24,38 +24,17 @@ import (
   "os"
 )
 
-type FileStatus uint
-const (
-   FS_OK FileStatus = iota
-   FS_NotFound
-   FS_NotFile
-   FS_PermissionError
-   FS_IOError
-)
-
 type IFileManager interface {
-  OpenBuffer(filename string, create bool) (buf *Buffer, status FileStatus, msg string)
-  GetBuffer(filename string) (buf *Buffer)
-  ReadBuffer(filename string) (status FileStatus, msg string)
-  SaveBuffer(filename string, backup bool) (status FileStatus, msg string)
+  // Open a file in a new buffer. |filename| should not be open in a buffer
+  // yet.
+  OpenBuffer(filename string, create bool) (buf *Buffer, status ResultCode, msg string)
 }
 
 type FileManager struct {
   buffers map[string] *Buffer
 }
 
-func (self *GapBuffer) Read() ResultCode {
-  self.Clear()
-  contents, err := ioutil.ReadFile(self.filename)
-  if err != nil {
-	// TODO: need more specific errors - use os.Error code
-	// to generate some more specific error description.
-	return IO_ERROR
-  } else {
-    self.InsertChars(contents)
-  }
-  return 0
-}
+
 
 func fileExists(filename string) bool {
   fi, err := os.Stat(filename)

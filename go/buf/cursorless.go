@@ -167,6 +167,7 @@ func (self *GapBuffer) AllText() []uint8 {
   len := self.Length()
   text := make([]uint8, len)
   for i := 0; i < len; i++ {
-    text[i] = self.GetCharAt(i)
+    text[i], _ = self.GetCharAt(i)
   }
+  return text
 }
