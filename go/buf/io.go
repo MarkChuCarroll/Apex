@@ -15,19 +15,16 @@
 // File: io.go
 // Author: Mark Chu-Carroll <markcc@gmail.com>
 // Description: implementations of IO methods for file-based buffers.
-
-
 package buf
 
 import (
   "io/ioutil"
   "os"
+  "container/vector"
 )
 
-
-
 type FileManagerImpl struct {
-  buffers map[string] *Buffer
+  buffers vector.Vector
 }
 
 func fileExists(filename string) bool {
@@ -59,14 +56,38 @@ func (self *GapBuffer) Write() ResultCode {
   return SUCCEEDED
 }
 
-func (self *GapBuffer) Read() (code ResultCode, err string) {
-  code, err = self.ReadFrom(self.filename)
-  return
+func (self *FileManagerImpl) GetBuffer(filename string) *GapBuffer {
+	for i := 0; i < self.buffers.Len(); i++ {
+		b := self.buffers[i].(*GapBuffer)
+		if b.filename == filename {
+			return b
+		}
+	}
+	return nil
 }
 
-func (self *GapBuffer) ReadFrom(filename string) (code ResultCode, err string) {
+func (self *FileManagerImpl) OpenBuffer(filename string, create bool) (buf *GapBuffer, status ResultCode) {
+	status = SUCCEEDED
+	buf = self.GetBuffer(filename)
+	if buf != nil {
+		return
+	}
+	if fileExists(filename) {
+		buf, status = NewFileBuffer(filename)
+		return
+	}
+	if create {
+		buf = NewBuffer(65536)
+		buf.filename = filename
+		return
+	}
+	status = NOT_FOUND
+	return
+}
+
+func (self *GapBuffer) Read() (code ResultCode, err string) {
   self.Clear()
-  contents, oserr := ioutil.ReadFile(filename)
+  contents, oserr := ioutil.ReadFile(self.filename)
   if oserr != nil {
 	// TODO: need more specific errors - use os.Error code
 	// to generate some more specific error description.
