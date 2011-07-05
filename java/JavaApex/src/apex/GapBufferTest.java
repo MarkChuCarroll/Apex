@@ -23,7 +23,7 @@ public class GapBufferTest {
    
    @Before
    public void setUp() {
-      _buf = new GapBuffer(100);
+      _buf = new GapBuffer();
    }
 
    @Test

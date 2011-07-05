@@ -13,6 +13,13 @@
 // limitations under the License.
 package apex;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Stack;
 
 /**
@@ -29,14 +36,36 @@ public class GapBuffer {
    private int _column;
    boolean _undoing = false;
    private Stack<UndoOperation> _undo = new Stack<UndoOperation>();
+   private File _path;
+   
+   static final int DEFAULT_SIZE = 65536;
 
    /**
     * Create a new gapbuffer.
     * @param size the initial size of the buffer.
     */
-   public GapBuffer(int size) {
-      _pre = new char[size];
-      _post = new char[size];
+   public GapBuffer(File path, boolean create) throws IOException {
+      _path = path;
+      int initialSize = DEFAULT_SIZE;
+      if (_path.exists()) {
+         initialSize = (int)path.length() * 2;
+      }
+      if (!_path.exists() && !create) {
+         throw new FileNotFoundException(path.toString());
+      }
+      _pre = new char[initialSize];
+      _post = new char[initialSize];
+      _prepos = 0;
+      _postpos = 0;
+      _line = 1;
+      _column = 0;
+      read();
+   }
+   
+   public GapBuffer() {
+      _path = null;
+      _pre = new char[DEFAULT_SIZE];
+      _post = new char[DEFAULT_SIZE];
       _prepos = 0;
       _postpos = 0;
       _line = 1;
@@ -424,6 +453,57 @@ public class GapBuffer {
          result.append(_post[_postpos - i - 1]);
       }
       return result.toString();
+   }
+   
+   public File getPath() {
+      return _path;
+   }
+   
+   /**
+    * Read the contents of the file into the buffer.
+    * @throws IOException
+    */
+   public void read() throws IOException {
+      clear();
+      BufferedReader in = new BufferedReader(new FileReader(_path));
+      for (String s = in.readLine(); s != null; s = in.readLine()) {
+         insert(s + '\n');
+      }
+      in.close();
+   }
+   
+   public void write() throws IOException {
+      // For writing to the buffer file, we always do backups.
+      writeTo(_path, true);
+   }
+   
+   public void writeTo(File f, boolean backup) throws IOException {
+      if (backup) {
+         if (f.exists()) {
+            File backupFile = new File(f.getAbsolutePath() + ".BAK");
+            if (backupFile.exists()) {
+               backupFile.delete();
+            }
+            _path.renameTo(backupFile);
+         }
+      }
+      String[] lines = allText().split("\n");
+      PrintWriter out = new PrintWriter(new FileWriter(f));
+      for (int i = 0; i < lines.length; i++) {
+         out.println(lines[i]);
+      }
+      out.close();         
+   }
+   
+   public void renameTo(File newName, boolean overwrite) throws IOException {
+      if (newName.exists()) {
+         if (!overwrite) {
+            throw new IOException("Can't rename to an existing file without override");
+         }
+         newName.renameTo(new File(newName.getAbsolutePath() + ".OLD"));
+      }
+      _path = newName;
+      write();
    }
    
    interface UndoOperation { 
