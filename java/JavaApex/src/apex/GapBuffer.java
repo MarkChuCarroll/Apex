@@ -59,7 +59,9 @@ public class GapBuffer {
       _postpos = 0;
       _line = 1;
       _column = 0;
-      read();
+      if (_path.exists()) {
+         read();
+      }
    }
    
    public GapBuffer() {
