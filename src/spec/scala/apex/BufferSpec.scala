@@ -15,7 +15,7 @@
 package apex
 
 
-import org.specs2.mutable._
+import org.specs._
 
 object BufferSpec extends Specification {
 
@@ -63,7 +63,7 @@ object BufferSpec extends Specification {
       val buf = new GapBuffer()
       buf.insert_string("abcdef\nghijkl\nmnopqr\nstu")
       buf.move_to(12)
-      buf.current_column should_== 5
+      buf.current_column must_== 5
     }
   
     "inserts should be at the gap" in {
