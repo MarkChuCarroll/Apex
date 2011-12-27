@@ -27,16 +27,16 @@ object BufferSpec extends Specification {
 
     "insert single strings" in {
       val buf = new GapBuffer()
-      buf.insert_string("hello there")
+      buf.insertString("hello there")
       buf.toString() must_== "{hello there}GAP{}"
     }
 
     "insert multiple strings the same as a single string concatenated" in {
       val buf1 = new GapBuffer()
-      buf1.insert_string("first ")
-      buf1.insert_string("second")
+      buf1.insertString("first ")
+      buf1.insertString("second")
       val buf2 = new GapBuffer()
-      buf2.insert_string("first second")
+      buf2.insertString("first second")
       buf1.toString() must_== buf2.toString()
     }
   }
@@ -44,47 +44,47 @@ object BufferSpec extends Specification {
   "a populated buffer" should {
     "move the gap when the cursor is moved" in {
        val buf = new GapBuffer()
-       buf.insert_string("1234567890")
-       buf.move_by(-3)
+       buf.insertString("1234567890")
+       buf.moveBy(-3)
        buf.toString() must_== "{1234567}GAP{890}" 
       
     }
 
     "expand its capacity if an insert makes it too large" in {
       val buf = new GapBuffer(10)
-      buf.insert_string("12345678\n")
-      buf.insert_string("9,10,11,12,13")
-      buf._prechars.length must be_>(10)
-      buf._postchars.length must be_>(10)
+      buf.insertString("12345678\n")
+      buf.insertString("9,10,11,12,13")
+      buf.preChars.length must be_>(10)
+      buf.postChars.length must be_>(10)
       buf.toString() must_== "{12345678\n9,10,11,12,13}GAP{}"
     }
 
     "track columns when the cursor is moved" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcdef\nghijkl\nmnopqr\nstu")
-      buf.move_to(12)
-      buf.current_column must_== 5
+      buf.insertString("abcdef\nghijkl\nmnopqr\nstu")
+      buf.moveTo(12)
+      buf.currentColumn must_== 5
     }
   
     "inserts should be at the gap" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcde")
-      buf.move_by(-3)
-      buf.insert_string("123")
-      buf.move_by(2)
+      buf.insertString("abcde")
+      buf.moveBy(-3)
+      buf.insertString("123")
+      buf.moveBy(2)
       buf.toString() must_== "{ab123cd}GAP{e}"
     }
 
     "cursor position should change as cursor moves" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcdefg\nhijklmnop")
-      buf.move_to(4)
-      buf.current_column must_== 4
+      buf.insertString("abcdefg\nhijklmnop")
+      buf.moveTo(4)
+      buf.currentColumn must_== 4
       buf.toString() must_==  "{abcd}GAP{efg\nhijklmnop}"
 
-      buf.move_to(8)
-      buf.current_column must_== 0
-      buf.current_line must_== 2
+      buf.moveTo(8)
+      buf.currentColumn must_== 0
+      buf.currentLine must_== 2
     }
   }
 
@@ -92,8 +92,8 @@ object BufferSpec extends Specification {
 
     "do forwards cuts" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcde\nfghijklm")
-      buf.move_to(4)
+      buf.insertString("abcde\nfghijklm")
+      buf.moveTo(4)
       val cut = new String(buf.delete(5))
       cut must_== "e\nfgh"
       buf.toString() must_=="{abcd}GAP{ijklm}"
@@ -101,8 +101,8 @@ object BufferSpec extends Specification {
 
     "do backwards cuts" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcde\nfghijklm")
-      buf.move_to(9)
+      buf.insertString("abcde\nfghijklm")
+      buf.moveTo(9)
       val cut = new String(buf.delete(-5))
       cut must_== "e\nfgh"
       buf.toString() must_== "{abcd}GAP{ijklm}"
@@ -110,8 +110,8 @@ object BufferSpec extends Specification {
 
     "truncate cuts that try to go beyond buffer end" in {
       val buf = new GapBuffer()
-      buf.insert_string("abcdefg\nhijklmnop\nqrstuvwxyz\n")
-      buf.move_to(20)
+      buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
+      buf.moveTo(20)
       val cut = new String(buf.delete(20))
       cut.length() must_== 9
       cut must_== "stuvwxyz\n"
