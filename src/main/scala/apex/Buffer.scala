@@ -162,11 +162,10 @@ trait Buffer {
 class GapBuffer(file: File, initial_size: Int) extends Buffer {
   var preChars = new Array[Char](initial_size)
   var postChars = new Array[Char](initial_size)
-  var _size = initial_size
   var preIdx = 0
   var postIdx = 0
   override var currentLine = 1
-  var _column = 0
+  var currentColumn = 0
   val _undo_stack = new java.util.Stack[UndoOperation]
   var _undoing = false
   var _file = file
@@ -267,7 +266,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Returns the character at a position.
     */
   override def charAt(pos: Int): Char = {
-    if (pos < 0 || pos >= _size) {
+    if (pos < 0 || pos >= size) {
       return 0
     }
     var c = ' '
@@ -351,8 +350,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     return result
   }
 
-  override def currentColumn = _column
-
+  override def currentLine = _line
 
   // absolute position operations: methods that operate on a buffer
   // without any notion of "current point". The underlying
@@ -412,7 +410,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     * @return an array containing the characters in the range
     */
   override def copyRange(start: Int, end: Int): Array[Char] = {
-    if (start > _size) {
+    if (start > size) {
       throw new BufferPositionError(
         this, start,
         "Start of requested range past end of buffer")
@@ -452,7 +450,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
       return Some(0)
     } else {
       var current = 1
-      for (i <- 0 until _size) {
+      for (i <- 0 until size) {
         if (charAt(i) == '\n') {
           current = current + 1
           if (current == line) {
@@ -467,7 +465,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Convert a character index to line/column
     */
   override def getLineAndColumn(pos: Int): Option[(Int, Int)] = {
-    if (pos > _size) {
+    if (pos > size) {
       None
     } else {
       var line = 1
@@ -501,20 +499,20 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   // Internal primitives
   private def pushPre(c: Char) = {
     checkCapacity
-    _prechars(_pre) = c
-    _pre += 1
+    preChars(preIdx) = c
+    preIdx += 1
   }
 
   private def pushPost(c: Char) = {
     checkCapacity
-    _postchars(_post) = c
-    _post += 1
+    postChars(postIdx) = c
+    postIdx += 1
   }
 
   private def popPre: Char = {
-    val result = _prechars(_pre - 1)
-    _pre -= 1
-    result
+    val result = preChars(preIdx - 1)
+    preIdx -= 1
+    resultdx
   }
 
   private def popPost: Char = {
@@ -541,7 +539,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     return result
   }
 
-  override def getPosition: Int = _pre
+  override def getPosition: Int = preIdx
 
   override def toString: String = {
     var result = "{"
@@ -594,7 +592,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   // Primitives
 
   private def retreatCursor = {
-    if (_pre > 0) {
+    if (preIdx > 0) {
       val c = popPre
       pushPost(c)
       reverseUpdatePosition(c)
@@ -602,8 +600,8 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   }
 
   private def checkCapacity = {
-    if ((_pre + _post) >= _size) {
-      expandCapacity(2 * _size)
+    if ((preIdx + _post) >= size) {
+      expandCapacity(2 * size)
     }
   }
 
@@ -651,7 +649,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     */
   private def reverseUpdatePosition(c: Char) = {
     if (_line == 1) {
-      _column = _pre
+      _column = preIdx
     } else if (c == '\n') {
       currentLine -= 1
       // Look back to either the beginning of the buffer, or the previous
