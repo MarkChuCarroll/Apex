@@ -160,12 +160,12 @@ trait Buffer {
 }
 
 class GapBuffer(file: File, initial_size: Int) extends Buffer {
-  var _prechars = new Array[Char](initial_size)
-  var _postchars = new Array[Char](initial_size)
+  var preChars = new Array[Char](initial_size)
+  var postChars = new Array[Char](initial_size)
   var _size = initial_size
-  var _pre = 0
-  var _post = 0
-  var _line = 1
+  var preIdx = 0
+  var postIdx = 0
+  override var currentLine = 1
   var _column = 0
   val _undo_stack = new java.util.Stack[UndoOperation]
   var _undoing = false
@@ -178,13 +178,15 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   def this() = this(new File("/tmp/scratch"))
 
+  def size = preIdx + postIdx
+
   // Position-based operations: operations which perform edits relative to
   // an implicit cursor point.
 
   /** moves the cursor to a character index.
     */
   override def moveTo(pos: Int) {
-    moveBy(pos - _pre)
+    moveBy(pos - preIdx)
   }
 
   /** Moves the cursor to the beginning of a line
@@ -192,7 +194,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   override def moveToLine(line: Int)  {
     // This could really use some optimization.
     moveTo(0)
-    while (_line < line && _post > 0) {
+    while (currentLine < line && postIdx > 0) {
       advanceCursor
     }
   }
@@ -240,7 +242,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Inserts a string at the current cursor position.
     */
   override def insertString(str: String) = {
-    val undo = InsertOperation(this, _pre, str.length)
+    val undo = InsertOperation(this, preIdx, str.length)
     pushUndo(undo)
     str foreach prim_insert_char
   }
@@ -248,7 +250,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Insert a character at the current cursor position.
     */
   override def insertChar(c: Char) = {
-    val undo = InsertOperation(this, _pre, 1)
+    val undo = InsertOperation(this, preIdx, 1)
     prim_insert_char(c)
     pushUndo(undo)
   }
@@ -256,10 +258,10 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Inserts an array of characters at the current cursor position.
     */
   override def insertChars(cs: Array[Char]) = {
-    val undo = InsertOperation(this, _pre, cs.length)
+    val undo = InsertOperation(this, preIdx, cs.length)
     pushUndo(undo)
     for (c <- cs)
-      prim_insert_char(c)
+      primInsertChar(c)
   }
 
   /** Returns the character at a position.
@@ -269,12 +271,12 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
       return 0
     }
     var c = ' '
-    if (pos < _pre) {
-      c = _prechars(pos)
+    if (pos < preIdx) {
+      c = preChars(pos)
     } else {
-      val post_offset = pos - _pre;
+      val postOffset = pos - preIdx;
       // post is in reverse order - so we need to reverse the index.
-      c = _postchars(_post - post_offset - 1)
+      c = postChars(postIdx - postOffset - 1)
     }
     return c
   }
@@ -282,8 +284,8 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Deletes the character before the cursor.
     */
   override def deleteCharBackwards = {
-    if (_pre > 0) {
-      val pos = _pre
+    if (preIdx > 0) {
+      val pos = preIdx
       val c = popPre
       reverseUpdatePosition(c)
       val undo = DeleteOperation(this, pos, Array(c))
@@ -302,20 +304,20 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     }
     if (s > 0) {
       var realsize = s
-      if (realsize > _post) {
-        realsize = _post
+      if (realsize > postIdx) {
+        realsize = postIdx
       }
       val result = new Array[Char](realsize)
       for (i <- 0 until realsize) {
         result(i) = popPost
       }
-      val undo = DeleteOperation(this, _pre, result)
+      val undo = DeleteOperation(this, preIdx, result)
       pushUndo(undo)
       return result
     } else {
       var realsize = -s
-      if (realsize > _pre) {
-        realsize = _pre
+      if (realsize > preIdx) {
+        realsize = preIdx
       }
       moveBy(-realsize)
       return delete(realsize)
@@ -330,15 +332,15 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
       return null
     }
     var realsize = size
-    var startpos = _pre
+    var startpos = preIdx
     if (size > 0) {
-      if (realsize > _post) {
-        realsize = _post
+      if (realsize > postIdx) {
+        realsize = postIdx
       }
     } else {
       realsize = -size
-      if (realsize > _pre) {
-        realsize = _pre
+      if (realsize > preIdx) {
+        realsize = preIdx
       }
       startpos -= realsize
     }
@@ -351,7 +353,6 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   override def currentColumn = _column
 
-  override def currentLine = _line
 
   // absolute position operations: methods that operate on a buffer
   // without any notion of "current point". The underlying
@@ -361,11 +362,11 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   /** Get the number of characters in this buffer.
     * @return the number of characters
     */
-  override def length: Int = _pre + _post
+  override def length: Int = preIdx + postIdx
 
   override def clear = {
-    _pre = 0
-    _post = 0
+    preIdx = 0
+    postIdx = 0
   }
 
   /** Inserts a string at an index
@@ -377,7 +378,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     insertString(str)
   }
 
-  /** Inserts a single character.
+  /** Inserts a single character.dx
     * @param pos the character index where the insert should be performed
     * @param c the character to insert
     */
@@ -416,7 +417,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
         this, start,
         "Start of requested range past end of buffer")
     }
-    if (end > _size) {
+    if (end > capacity) {
       throw new BufferPositionError(
         this, end,
         "End of requested range past end of buffer")
@@ -517,8 +518,8 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   }
 
   private def popPost: Char = {
-    val result = _postchars(_post - 1)
-    _post -= 1
+    val result = postChars(postIdx - 1)
+    postIdx -= 1
     result
   }
 
@@ -526,16 +527,16 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   def getPre: String = {
     var result = ""
-    for (i <- 0 until _pre) {
-      result += _prechars(i)
+    for (i <- 0 until preIdx) {
+      result += preChars(i)
     }
     return result
   }
 
   def getPost: String = {
     var result = ""
-    for (i <- 0 until _post) {
-      result += _postchars(i)
+    for (i <- 0 until postIdx) {
+      result += postChars(i)
     }
     return result
   }
@@ -544,12 +545,12 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   override def toString: String = {
     var result = "{"
-    for (i <- 0 until _pre) {
-      result += _prechars(i)
+    for (i <- 0 until preIdx) {
+      result += preChars(i)
     }
     result += "}GAP{"
-    for (i <- 0 until _post) {
-      result += _postchars(_post - i - 1)
+    for (i <- 0 until postIdx) {
+      result += postChars(postIdx - i - 1)
     }
     result += "}"
     result
@@ -560,7 +561,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     for (i <- 0 to length) {
       buffer_contents(i) = charAt(i)
     }
-    buffer_contents
+    bufferContents
   }
   
   def getLine(linenum: Int): Option[Array[Char]] = {
@@ -577,7 +578,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   override def readFromFile(file: java.io.File, fail_if_not_found: Boolean) {
     clear
-    if (!fail_if_not_found && !file.exists()) {
+    if (!failIfNotFound && !file.exists()) {
       return
     }
     val in = new BufferedSource(new FileInputStream(file))
@@ -609,15 +610,15 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   def expandCapacity(newsize: Int) = {
     val newpre = new Array[Char](newsize)
     val newpost = new Array[Char](newsize)
-    for (i <- 0 until _pre) {
-      newpre(i) = _prechars(i)
+    for (i <- 0 until preIdx) {
+      newpre(i) = preChars(i)
     }
-    for (i <- 0 until _post) {
-      newpost(newsize - i) = _postchars(_size - i)
+    for (i <- 0 until postIdx) {
+      newpost(newsize - i) = postChars(capacity - i)
     }
-    _prechars = newpre
-    _postchars = newpost
-    _size = newsize
+    preChars = newpre
+    postChars = newpost
+    capacity = newsize
   }
 
   private def prim_insert_char(c: Char) = {
@@ -630,10 +631,10 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     */
   private def forwardUpdatePosition(c: Char) = {
     if (c == '\n') {
-      _line += 1
-      _column = 0
+      currentLine += 1
+      currentColumn = 0
     } else {
-      _column += 1
+      currentColumn += 1
     }
   }
 
@@ -652,18 +653,18 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     if (_line == 1) {
       _column = _pre
     } else if (c == '\n') {
-      _line -= 1
+      currentLine -= 1
       // Look back to either the beginning of the buffer, or the previous
       // newline. The distance from there to the current position is the
       // current column number. (Not sure if this works correctly on the first
       // line.
       var i = 0
-      while ((_pre - i - 1) > 0 && _prechars(_pre - i - 1) != '\n') {
+      while ((preIdx - i - 1) > 0 && preChars(preIdx - i - 1) != '\n') {
         i += 1
       }
-      _column = i
+      currentColumn = i
     } else {
-      _column -= 1
+      currentColumn -= 1
     }
   }
 }
@@ -689,9 +690,8 @@ case class DeleteOperation(buf: GapBuffer, pos: Int, dels: Array[Char])
 }
 
 class BufferPositionError(b: GapBuffer, pos: Int, msg: String)
-  extends Exception {
+    extends Exception {
   val buffer = b
-  val requested_position = pos
+  val requestedPosition = pos
   val message = msg
 }
-
