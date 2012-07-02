@@ -16,159 +16,73 @@ package apex
 import scala.io.BufferedSource
 import java.io.FileInputStream
 import java.io.File
+import java.util.Stack
 
-trait Buffer {
-  // Position-based operations: operations which perform edits relative to
-  // an implicit cursor point.
+class BufferStackException extends Exception { }
 
-  /** moves the cursor to a character index.
+class BufferStackUnderflowException extends BufferStackException { }
+
+/** A utility class which represents one of the two contiguous text segments of
+  * a gap buffer. The main behavior of this resembles a stack, where you push or
+  * pop off of the active end. 
+  */
+class BufferStack {
+  val initLength = 65536
+
+  /** Returns the current number of characters in this buffer.
     */
-  def moveTo(pos: Int)
-
-  /** Moves the cursor to the beginning of a line
-    */
-  def moveToLine(line: Int) 
-
-  /** Moves the cursor to a particular column on the current line.
-    */
-  def moveToColumn(col: Int) 
-
-  /** Moves the cursor by a number of lines.
-    */
-  def moveByLine(l: Int)
-
-  /** Moves the cursor by a number of characters.
-    */
-  def moveBy(distance: Int)
-
-  /** Returns the line and column number of the current cursor position.
-    */
-  def currentLineAndColumn: (Int, Int)
-
-  /** Inserts a string at the current cursor position.
-    */
-  def insertString(str: String)
-
-  /** Insert a character at the current cursor position.
-    */
-  def insertChar(c: Char) 
-
-  /** Inserts an array of characters at the current cursor position.
-    */
-  def insertChars(cs: Array[Char])
-
-  /** Returns the character at a position.
-    */
-  def charAt(pos: Int): Char
-
-  /** Deletes the character before the cursor.
-    */
-  def deleteCharBackwards 
-
-  /** Deletes a string of characters starting at the current cursor
-    * position. If the number of characters to delete is negative, it will
-    * delete characters behind the cursor.
-    * @return the deleted characters.
-    */
-  def delete(s: Int): Array[Char] 
-
-  /** Copies a range of characters starting at the current cursor position.
-    *  @return the copied characters
-    */
-  def copy(size: Int): Array[Char] 
-
-  def currentColumn: Int
-
-  def currentLine: Int
-
-  // absolute position operations: methods that operate on a buffer
-  // without any notion of "current point". The underlying
-  // implementation still uses a cursor, and these methods do
-  // *not* guarantee that the cursor will be unchanged.
-
-  /** Get the number of characters in this buffer.
-    * @return the number of characters
-    */
-  def length: Int
-
-  def clear: Unit
-
-  /** Inserts a string at an index
-    * @param pos the character index where the insert should be performed
-    * @param str a string containing the characters to insert
-    */
-  def insertStringAt(pos: Int, str: String) 
-
-  /** Inserts a single character.
-    * @param pos the character index where the insert should be performed
-    * @param c the character to insert
-    */
-  def insertCharAt(pos: Int, c: Char): Unit
-
-  /** Inserts an array of characters.
-    * @param pos the character index where the insert should be performed
-    * @param c the character to insert
-    */
-  def insertCharsAt(pos: Int, cs: Array[Char]): Unit
-
-  /** Delete a range of characters.
-    * @param start the character index of the beginning of the range to delete
-    * @param end the character index of the end of the range to delete
-    * @return an array containing the delete characters.
-    */
-  def deleteRange(start: Int, end: Int): Array[Char]
-
-  /** Retrieve a range of characters.
-    * @param start the character index of the start of the range
-    * @param end the character index of the end of the range
-    * @return an array containing the characters in the range
-    */
-  def copyRange(start: Int, end: Int): Array[Char]
+  var length: Int = 0
   
-  def getLineLength(linenum: Int): Option[Int] = {
-    getPositionOfLine(linenum).map({ start_pos =>
-      getPositionOfLine(linenum + 1) match {
-        case Some(next) => next - start_pos - 1 // exclude the newline 
-        case None => length - start_pos
-      }      
-    })
+  private var chars: Array[Char] = new Array[Char](initLength)
+  
+  /** Pushes a character onto the end of the buffer.
+    */
+  def push(c: Char) {
+    if (length >= chars.length - 1) {
+      val newChars = new Array[Char](chars.length * 2)
+      for (i <- 0 until length) {
+        newChars(i) = chars(i)
+        chars = newChars
+      }
+    }
+    chars(length) = c
+    length = length + 1
   }
-
-  /** Gets the contents of a line. Returns None if there is no such line. 
-    */
-  def getLine(linenum: Int): Option[Array[Char]] 
   
-  def getPosition: Int
+  /** Pops character off the active end of the buffer. Throws an
+    * exception if the buffer is empty. 
+    */
+  def pop: Char = {
+    if (length > 0) {
+      length = length - 1
+      chars(length)
+    } else {
+      throw new BufferStackUnderflowException
+    } 
+  }
   
-  /** Convert a line/column to a character index.
-    */
-  def getPositionOf(linenum: Int, colnum: Int): Option[Int] 
-
-  def getPositionOfLine(line: Int): Option[Int]
-
-  /** Convert a character index to line/column
-    */
-  def getLineAndColumn(pos: Int): Option[(Int, Int)]
-
-  def undo: Unit
-
-  def contents: Array[Char]
-
-  def readFromFile(file: java.io.File, fail_if_not_found: Boolean): Unit
-
-  def writeToFile(file: java.io.File, create: Boolean): Unit
+  def at(idx: Int): Option[Char] = {
+    if (idx >= length) {
+      None
+    } else {
+      Some(chars(idx))
+    }
+  }
+  
+  def all: String = new String(chars.slice(0, length))
+  
+  def reset {
+    length = 0
+  }
 }
 
-class GapBuffer(file: File, initial_size: Int) extends Buffer {
-  var preChars = new Array[Char](initial_size)
-  var postChars = new Array[Char](initial_size)
-  var preIdx = 0
-  var postIdx = 0
-  override var currentLine = 1
+class GapBuffer(var file: File, initialSize: Int) {
+  val pre = new BufferStack
+  val post = new BufferStack
+  var currentLine = 1
   var currentColumn = 0
-  val _undo_stack = new java.util.Stack[UndoOperation]
-  var _undoing = false
-  var _file = file
+  val undoStack = new Stack[UndoOperation]
+  var undoing = false
 
   def this(file: File) =
     this(file, 65536)
@@ -177,30 +91,30 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   def this() = this(new File("/tmp/scratch"))
 
-  def size = preIdx + postIdx
+  def size = pre.length + post.length
 
   // Position-based operations: operations which perform edits relative to
   // an implicit cursor point.
 
-  /** moves the cursor to a character index.
+  /** Moves the cursor to a character index.
     */
-  override def moveTo(pos: Int) {
-    moveBy(pos - preIdx)
+  def moveTo(pos: Int) = {
+    moveBy(pos - pre.length)
   }
 
   /** Moves the cursor to the beginning of a line
     */
-  override def moveToLine(line: Int)  {
+  def moveToLine(line: Int) = {
     // This could really use some optimization.
     moveTo(0)
-    while (currentLine < line && postIdx > 0) {
-      advanceCursor
+    while (currentLine < line && post.length > 0) {
+      stepCursorForward
     }
   }
 
   /** Moves the cursor to a particular column on the current line.
     */
-  override def moveToColumn(col: Int) {
+  def moveToColumn(col: Int) = {
     val curcol = currentColumn
     if (curcol > col) {
       val distance = curcol - col
@@ -214,109 +128,102 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
 
   /** Moves the cursor by a number of lines.
     */
-  override def moveByLine(l: Int) {
+  def moveByLine(l: Int) = {
     val (line, col) = currentLineAndColumn
     moveToLine(line + l)
   }
 
   /** Moves the cursor by a number of characters.
     */
-  override def moveBy(distance: Int) {
+  def moveBy(distance: Int) = {
     if (distance > 0) {
       for (i <- 0 until distance) {
-        advanceCursor
+        stepCursorForward
       }
     } else if (distance < 0) {
       for (i <- 0 until (-distance)) {
-        retreatCursor
+        stepCursorBackward
       }
     }
   }
 
-  /** Returns the line and column number of the current cursor position.
+  /** Gets the line and column number of the current cursor position.
     */
-  override def currentLineAndColumn: (Int, Int) =
-    (currentLine, currentColumn)
+  def currentLineAndColumn: (Int, Int) = (currentLine, currentColumn)
 
   /** Inserts a string at the current cursor position.
     */
-  override def insertString(str: String) = {
-    val undo = InsertOperation(this, preIdx, str.length)
+  def insertString(str: String) = {
+    val undo = InsertOperation(this, pre.length, str.length)
     pushUndo(undo)
-    str foreach prim_insert_char
+    str foreach primInsertChar
   }
 
-  /** Insert a character at the current cursor position.
+  /** Inserts a character at the current cursor position.
     */
-  override def insertChar(c: Char) = {
-    val undo = InsertOperation(this, preIdx, 1)
-    prim_insert_char(c)
+  def insertChar(c: Char) = {
+    val undo = InsertOperation(this, pre.length, 1)
+    primInsertChar(c)
     pushUndo(undo)
   }
 
-  /** Inserts an array of characters at the current cursor position.
+  /** Insert an array of characters at the current cursor position.
     */
-  override def insertChars(cs: Array[Char]) = {
-    val undo = InsertOperation(this, preIdx, cs.length)
+  def insertChars(cs: Array[Char]) = {
+    val undo = InsertOperation(this, pre.length, cs.length)
     pushUndo(undo)
     for (c <- cs)
       primInsertChar(c)
   }
 
-  /** Returns the character at a position.
+  /** Gets the character at a position.
     */
-  override def charAt(pos: Int): Char = {
-    if (pos < 0 || pos >= size) {
-      return 0
-    }
-    var c = ' '
-    if (pos < preIdx) {
-      c = preChars(pos)
+  def charAt(pos: Int): Option[Char] = {
+    if (pos > length) {
+      None
+    } else if (pos < pre.length) {
+      pre.at(pos)
     } else {
-      val postOffset = pos - preIdx;
-      // post is in reverse order - so we need to reverse the index.
-      c = postChars(postIdx - postOffset - 1)
+      val idx = post.length - (pos - pre.length) - 1
+      post.at(idx)
     }
-    return c
   }
 
-  /** Deletes the character before the cursor.
+  /** Deletes the character before the cursor
     */
-  override def deleteCharBackwards = {
-    if (preIdx > 0) {
-      val pos = preIdx
-      val c = popPre
+  def deleteCharBackwards = {
+    if (pre.length > 0) {
+      val c = pre.pop
       reverseUpdatePosition(c)
-      val undo = DeleteOperation(this, pos, Array(c))
+      val undo = DeleteOperation(this, pre.length, Array(c))
       pushUndo(undo)
     }
   }
 
-  /** Deletes a string of characters starting at the current cursor
-    * position. If the number of characters to delete is negative, it will
-    * delete characters behind the cursor.
+  /** Deletes a string of characters starting at the current cursor position. If the number of
+    * characters to delete is negative, it will delete characters behind the cursor.
     * @return the deleted characters.
     */
-  override def delete(s: Int): Array[Char] = {
+  def delete(s: Int): Array[Char] = {
     if (s == 0) {
       return null
     }
     if (s > 0) {
       var realsize = s
-      if (realsize > postIdx) {
-        realsize = postIdx
+      if (realsize > post.length) {
+        realsize = post.length
       }
       val result = new Array[Char](realsize)
       for (i <- 0 until realsize) {
-        result(i) = popPost
+        result(i) = post.pop
       }
-      val undo = DeleteOperation(this, preIdx, result)
+      val undo = DeleteOperation(this, pre.length, result)
       pushUndo(undo)
       return result
     } else {
       var realsize = -s
-      if (realsize > preIdx) {
-        realsize = preIdx
+      if (realsize > pre.length) {
+        realsize = pre.length
       }
       moveBy(-realsize)
       return delete(realsize)
@@ -324,98 +231,97 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   }
 
   /** Copies a range of characters starting at the current cursor position.
-    *  @return the copied characters
     */
-  override def copy(size: Int): Array[Char] = {
+  def copy(size: Int): Array[Char] = {
     if (size == 0) {
       return null
     }
     var realsize = size
-    var startpos = preIdx
+    var startpos = pre.length
     if (size > 0) {
-      if (realsize > postIdx) {
-        realsize = postIdx
+      if (realsize > post.length) {
+        realsize = post.length
       }
     } else {
       realsize = -size
-      if (realsize > preIdx) {
-        realsize = preIdx
+      if (realsize > pre.length) {
+        realsize = pre.length
       }
       startpos -= realsize
     }
     val result = new Array[Char](realsize)
     for (i <- 0 until realsize) {
-      result(i) = charAt(startpos + i)
+      result(i) = charAt(startpos + i).get
     }
     return result
   }
-
-  override def currentLine = _line
 
   // absolute position operations: methods that operate on a buffer
   // without any notion of "current point". The underlying
   // implementation still uses a cursor, and these methods do
   // *not* guarantee that the cursor will be unchanged.
 
-  /** Get the number of characters in this buffer.
+  /** Gets the number of characters in this buffer.
     * @return the number of characters
     */
-  override def length: Int = preIdx + postIdx
+  def length: Int = pre.length + post.length
 
-  override def clear = {
-    preIdx = 0
-    postIdx = 0
+  /** Empties the buffer.
+    */
+  def clear = {
+    pre.reset
+    post.reset
   }
 
   /** Inserts a string at an index
     * @param pos the character index where the insert should be performed
     * @param str a string containing the characters to insert
     */
-  override def insertStringAt(pos: Int, str: String) {
+  def insertStringAt(pos: Int, str: String) {
     moveTo(pos)
     insertString(str)
   }
 
-  /** Inserts a single character.dx
+  /** Inserts a single character.
     * @param pos the character index where the insert should be performed
     * @param c the character to insert
     */
-  override def insertCharAt(pos: Int, c: Char) {
+  def insertCharAt(pos: Int, c: Char) {
     moveTo(pos)
     insertChar(c)
   }
 
   /** Inserts an array of characters.
-    * @param pos the character index where the insert should be performed
-    * @param c the character to insert
-    */
-  override def insertCharsAt(pos: Int, cs: Array[Char]) {
+   * @param pos the character index where the insert should be performed
+   * @param c the character to insert
+   */
+  def insertCharsAt(pos: Int, cs: Array[Char]) {
     moveTo(pos)
     insertChars(cs)
   }
 
-  /** Delete a range of characters.
+  /** Deletes a range of characters.
     * @param start the character index of the beginning of the range to delete
     * @param end the character index of the end of the range to delete
     * @return an array containing the delete characters.
     */
-  override def deleteRange(start: Int, end: Int): Array[Char] = {
+  def deleteRange(start: Int, end: Int): Array[Char] = {
     moveTo(start)
     delete(end - start)
   }
 
-  /** Retrieve a range of characters.
+  /** Retrieves a range of characters.
     * @param start the character index of the start of the range
     * @param end the character index of the end of the range
     * @return an array containing the characters in the range
     */
-  override def copyRange(start: Int, end: Int): Array[Char] = {
-    if (start > size) {
+  def copyRange(start: Int, end: Int): Array[Char] = {
+    if (start > length) {
       throw new BufferPositionError(
         this, start,
         "Start of requested range past end of buffer")
     }
-    if (end > capacity) {
+    if (end > length) {
       throw new BufferPositionError(
         this, end,
         "End of requested range past end of buffer")
@@ -429,25 +335,27 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     val size = end - start;
     val result = new Array[Char](end - start)
     for (i <- 0 until size) {
-      result(i) = charAt(start + i)
+      result(i) = charAt(start + i).get
     }
     result
   }
 
-  /** Convert a line/column to a character index.
-    */
-  override def getPositionOf(linenum: Int, colnum: Int): Option[Int] = {
-    getPositionOfLine(linenum) flatMap { pos =>
-      getLineLength(linenum).flatMap { lineLen =>
-        if (colnum >= lineLen) None
-        else Some(pos + colnum)
-      }
-    }
+  /** Converts a line/column to a character index.
+   */
+  def positionOf(linenum: Int, colnum: Int): Option[Int] = {
+    moveToLine(linenum)
+    moveToColumn(colnum)
+    if (currentLine == linenum && currentColumn == colnum) {
+      Some(currentPosition)
+    } else None
   }
 
-  override def getPositionOfLine(line: Int): Option[Int] = {
+  /** Returns Some of the character position of the first character in the specified line,
+    * or None if the file doesn't have that many lines. 
+    */
+  def positionOfLine(line: Int): Option[Int] = {
     if (line == 1) {
-      return Some(0)
+      Some(0)
     } else {
       var current = 1
       for (i <- 0 until size) {
@@ -458,175 +366,102 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
           }
         }
       }
-      return None
+      None
     }
   }
 
   /** Convert a character index to line/column
     */
-  override def getLineAndColumn(pos: Int): Option[(Int, Int)] = {
-    if (pos > size) {
-      None
-    } else {
-      var line = 1
-      var column = 0
-      for (i <- 0 until pos) {
-        if (charAt(i) == '\n') {
-          line = line + 1
-          column = 0
-        } else {
-          column = column + 1
-        }
-      }
-      Some((line, column))
+  def lineAndColumnOf(pos: Int): (Int, Int) = {
+    if (pos > length) {
+      throw new BufferPositionError(this, pos, "Position past end of buffer")
     }
+    var line = 1
+    var column = 0
+    for (i <- 0 until pos) {
+      if (charAt(i) == '\n') {
+        line = line + 1
+        column = 0
+      } else {
+        column = column + 1
+      }
+    }
+    (line, column)
   }
 
   // Undo operations
   private def pushUndo(u: UndoOperation) {
-    if (!_undoing) {
-      _undo_stack.push(u);
+    if (!undoing) {
+      undoStack.push(u);
     }
   }
 
-  override def undo {
-    val u = _undo_stack.pop()
-    _undoing = true
+  def undo {
+    val u = undoStack.pop()
+    undoing = true
     u.execute
-    _undoing = false;
+    undoing = false;
   }
 
-  // Internal primitives
-  private def pushPre(c: Char) = {
-    checkCapacity
-    preChars(preIdx) = c
-    preIdx += 1
-  }
+  def currentPosition: Int = pre.length
 
-  private def pushPost(c: Char) = {
-    checkCapacity
-    postChars(postIdx) = c
-    postIdx += 1
-  }
-
-  private def popPre: Char = {
-    val result = preChars(preIdx - 1)
-    preIdx -= 1
-    resultdx
-  }
-
-  private def popPost: Char = {
-    val result = postChars(postIdx - 1)
-    postIdx -= 1
-    result
-  }
-
-  // Methods for use in testing and debugging.
-
-  def getPre: String = {
-    var result = ""
-    for (i <- 0 until preIdx) {
-      result += preChars(i)
-    }
-    return result
-  }
-
-  def getPost: String = {
-    var result = ""
-    for (i <- 0 until postIdx) {
-      result += postChars(i)
-    }
-    return result
-  }
-
-  override def getPosition: Int = preIdx
-
-  override def toString: String = {
+  override def toString(): String = {
     var result = "{"
-    for (i <- 0 until preIdx) {
-      result += preChars(i)
+    for (i <- 0 until pre.length) {
+      result += pre.at(i).get
     }
     result += "}GAP{"
-    for (i <- 0 until postIdx) {
-      result += postChars(postIdx - i - 1)
+    for (i <- 0 until post.length) {
+      result += post.at(post.length - i - 1).get
     }
     result += "}"
     result
   }
 
-  override def contents: Array[Char] = {
-    val buffer_contents = new Array[Char](length)
-    for (i <- 0 to length) {
-      buffer_contents(i) = charAt(i)
+  def contents: Array[Char] = {
+    val bufferContents = new Array[Char](length)
+    for (i <- 0 until length) {
+      bufferContents(i) = charAt(i).get
     }
     bufferContents
   }
-  
-  def getLine(linenum: Int): Option[Array[Char]] = {
-    getPositionOfLine(linenum) map { startPos =>
-      // .get is safe, because it only returns None when getPositionOfLine is also None.
-      val lineLen = getLineLength(linenum).get
-      val lineChars = new Array[Char](lineLen)
-      for (i <- 0 to lineLen - 1) {
-        lineChars(i) = charAt(startPos + i) 
-      }
-      lineChars
-    }
-  }  
 
-  override def readFromFile(file: java.io.File, fail_if_not_found: Boolean) {
+  /**  
+    * 
+    */
+  def readFromFile(file: java.io.File, failIfNotFound: Boolean) {
     clear
     if (!failIfNotFound && !file.exists()) {
       return
     }
     val in = new BufferedSource(new FileInputStream(file))
-    in.getLines foreach (line => insertString(line + '\n'))
+    for (c <- in.toSeq) {
+      pre.push(c)
+    }
     in.close()
   }
 
-  override def writeToFile(file: java.io.File, create: Boolean) {
+  def writeToFile(file: java.io.File, create: Boolean) {
 
   }
-
-  // --------------------------------
-  // Primitives
-
-  private def retreatCursor = {
-    if (preIdx > 0) {
-      val c = popPre
-      pushPost(c)
+  
+  def stepCursorBackward = {
+    if (pre.length > 0) {
+      val c = pre.pop
+      post.push(c)
       reverseUpdatePosition(c)
     }
   }
 
-  private def checkCapacity = {
-    if ((preIdx + _post) >= size) {
-      expandCapacity(2 * size)
-    }
-  }
-
-  def expandCapacity(newsize: Int) = {
-    val newpre = new Array[Char](newsize)
-    val newpost = new Array[Char](newsize)
-    for (i <- 0 until preIdx) {
-      newpre(i) = preChars(i)
-    }
-    for (i <- 0 until postIdx) {
-      newpost(newsize - i) = postChars(capacity - i)
-    }
-    preChars = newpre
-    postChars = newpost
-    capacity = newsize
-  }
-
-  private def prim_insert_char(c: Char) = {
-    pushPre(c)
+  private def primInsertChar(c: Char) = {
+    pre.push(c)
     forwardUpdatePosition(c)
   }
 
-  /** For any method that moves the cursor forward - whether by inserting or
-    * by simple cursor motion - update the line and column positions.
-    */
+  /**
+   * For any method that moves the cursor forward - whether by inserting or
+   * by simple cursor motion - update the line and column positions.
+   */
   private def forwardUpdatePosition(c: Char) = {
     if (c == '\n') {
       currentLine += 1
@@ -636,20 +471,21 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
     }
   }
 
-  private def advanceCursor = {
-    if (_post > 0) {
-      val c = popPost
-      pushPre(c)
+  def stepCursorForward = {
+    if (post.length > 0) {
+      val c = post.pop
+      pre.push(c)
       forwardUpdatePosition(c)
     }
   }
 
-  /** For any operation that steps the cursor backward, update the
-    * line and column positions.
-    */
+  /**
+   * For any operation that steps the cursor backward, update the
+   * line and column positions.
+   */
   private def reverseUpdatePosition(c: Char) = {
-    if (_line == 1) {
-      _column = preIdx
+    if (currentLine == 1) {
+      currentColumn = pre.length
     } else if (c == '\n') {
       currentLine -= 1
       // Look back to either the beginning of the buffer, or the previous
@@ -657,7 +493,7 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
       // current column number. (Not sure if this works correctly on the first
       // line.
       var i = 0
-      while ((preIdx - i - 1) > 0 && preChars(preIdx - i - 1) != '\n') {
+      while ((pre.length - i - 1) > 0 && pre.at(pre.length - i - 1) != Some('\n')) {
         i += 1
       }
       currentColumn = i
@@ -667,12 +503,12 @@ class GapBuffer(file: File, initial_size: Int) extends Buffer {
   }
 }
 
-abstract class UndoOperation() {
+abstract class UndoOperation {
   def execute
 }
 
 case class InsertOperation(buf: GapBuffer, pos: Int, len: Int)
-  extends UndoOperation() {
+     extends UndoOperation {
   def execute {
     buf.moveTo(pos)
     buf.delete(len)
@@ -680,7 +516,7 @@ case class InsertOperation(buf: GapBuffer, pos: Int, len: Int)
 }
 
 case class DeleteOperation(buf: GapBuffer, pos: Int, dels: Array[Char])
-  extends UndoOperation() {
+     extends UndoOperation {
   def execute {
     buf.moveTo(pos)
     buf.insertChars(dels)

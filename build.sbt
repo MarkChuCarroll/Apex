@@ -1,12 +1,7 @@
-name := "Apex Editor"
+name := "Apex"
 
-version := "0.1"
+version := "1.0"
 
 scalaVersion := "2.9.1"
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "1.6.1" % "test"
-
-
-
-  resolvers ++= Seq("snapshots" at "http://scala-tools.org/repo-snapshots",
-                    "releases"  at "http://scala-tools.org/repo-releases")
+libraryDependencies += "com.novocode"   %  "junit-interface"     % "0.7"   % "test->default"
