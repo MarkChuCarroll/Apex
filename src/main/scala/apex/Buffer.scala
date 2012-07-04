@@ -14,67 +14,12 @@
 
 package apex
 import scala.io.BufferedSource
-import java.io.FileInputStream
-import java.io.File
+import java.io.{File, FileInputStream, FileWriter}
 import java.util.Stack
 
 class BufferStackException extends Exception { }
 
 class BufferStackUnderflowException extends BufferStackException { }
-
-/** A utility class which represents one of the two contiguous text segments of
-  * a gap buffer. The main behavior of this resembles a stack, where you push or
-  * pop off of the active end. 
-  */
-class BufferStack {
-  val initLength = 65536
-
-  /** Returns the current number of characters in this buffer.
-    */
-  var length: Int = 0
-  
-  private var chars: Array[Char] = new Array[Char](initLength)
-  
-  /** Pushes a character onto the end of the buffer.
-    */
-  def push(c: Char) {
-    if (length >= chars.length - 1) {
-      val newChars = new Array[Char](chars.length * 2)
-      for (i <- 0 until length) {
-        newChars(i) = chars(i)
-        chars = newChars
-      }
-    }
-    chars(length) = c
-    length = length + 1
-  }
-  
-  /** Pops character off the active end of the buffer. Throws an
-    * exception if the buffer is empty. 
-    */
-  def pop: Char = {
-    if (length > 0) {
-      length = length - 1
-      chars(length)
-    } else {
-      throw new BufferStackUnderflowException
-    } 
-  }
-  
-  def at(idx: Int): Option[Char] = {
-    if (idx >= length) {
-      None
-    } else {
-      Some(chars(idx))
-    }
-  }
-  
-  def all: String = new String(chars.slice(0, length))
-  
-  def reset {
-    length = 0
-  }
-}
 
 class GapBuffer(var file: File, initialSize: Int) {
   val pre = new BufferStack
@@ -91,10 +36,33 @@ class GapBuffer(var file: File, initialSize: Int) {
 
   def this() = this(new File("/tmp/scratch"))
 
-  def size = pre.length + post.length
-
   // Position-based operations: operations which perform edits relative to
   // an implicit cursor point.
+  
+  /** Move the cursor forward one position.
+    */
+  def stepCursorForward = {
+    if (post.length > 0) {
+      val c = post.pop
+      pre.push(c)
+      forwardUpdatePosition(c)
+    }
+  }  
+  
+  /** Move the cursor backwards one step.
+    */
+  def stepCursorBackward = {
+    if (pre.length > 0) {
+      val c = pre.pop
+      post.push(c)
+      reverseUpdatePosition(c)
+    }
+  }
+  
+   /** Gets the number of characters in this buffer.
+    * @return the number of characters
+    */
+  def length: Int = pre.length + post.length  
 
   /** Moves the cursor to a character index.
     */
@@ -126,13 +94,6 @@ class GapBuffer(var file: File, initialSize: Int) {
     }
   }
 
-  /** Moves the cursor by a number of lines.
-    */
-  def moveByLine(l: Int) = {
-    val (line, col) = currentLineAndColumn
-    moveToLine(line + l)
-  }
-
   /** Moves the cursor by a number of characters.
     */
   def moveBy(distance: Int) = {
@@ -144,6 +105,25 @@ class GapBuffer(var file: File, initialSize: Int) {
       for (i <- 0 until (-distance)) {
         stepCursorBackward
       }
+    }
+  }
+  
+    /** Moves the cursor by a number of lines.
+    * @param numberOfLines
+    * @return Some(the final position) or None if the position isn't in the buffer.
+    */
+  def moveByLines(numberOfLines: Int): Option[Int] = {
+    val targetLine = currentLine + numberOfLines 
+    if (targetLine < 0) {
+      moveTo(0)
+      None
+    } else if (targetLine > currentLine) {
+      while (post.length > 0 && currentLine != targetLine) { stepCursorForward }
+      if (currentLine != targetLine) Some(pre.length) else None
+    } else {
+      while (pre.length > 0 && currentLine != targetLine) { stepCursorBackward }
+      moveToColumn(0)
+      Some(0)
     }
   }
 
@@ -255,22 +235,29 @@ class GapBuffer(var file: File, initialSize: Int) {
     }
     return result
   }
+  
+  
 
   // absolute position operations: methods that operate on a buffer
   // without any notion of "current point". The underlying
   // implementation still uses a cursor, and these methods do
   // *not* guarantee that the cursor will be unchanged.
 
-  /** Gets the number of characters in this buffer.
-    * @return the number of characters
-    */
-  def length: Int = pre.length + post.length
-
-  /** Empties the buffer.
-    */
-  def clear = {
-    pre.reset
-    post.reset
+  def getLine(lineNum: Int): Option[Array[Char]] = {
+    positionOfLine(lineNum).map({ start =>
+      val endMaybeWithNewline = positionOfLine(lineNum + 1).map(_ - 1).getOrElse(length)
+      val end = if (charAt(endMaybeWithNewline) == '\n') {
+          endMaybeWithNewline - 1
+        } else {
+          endMaybeWithNewline
+        }
+      val len = end - start
+      val result = new Array[Char](len)
+      for (i <- 0 until len) {
+        result(i) = charAt(start + i).get
+      }
+      result
+    })
   }
 
   /** Inserts a string at an index
@@ -354,12 +341,13 @@ class GapBuffer(var file: File, initialSize: Int) {
     * or None if the file doesn't have that many lines. 
     */
   def positionOfLine(line: Int): Option[Int] = {
+    val newlineAsInt: Int = ('\n'.toInt)
     if (line == 1) {
       Some(0)
     } else {
       var current = 1
-      for (i <- 0 until size) {
-        if (charAt(i) == '\n') {
+      for (i <- 0 until length) {
+        if (charAt(i) == Some('\n')) {
           current = current + 1
           if (current == line) {
             return Some(i + 1)
@@ -405,18 +393,6 @@ class GapBuffer(var file: File, initialSize: Int) {
 
   def currentPosition: Int = pre.length
 
-  override def toString(): String = {
-    var result = "{"
-    for (i <- 0 until pre.length) {
-      result += pre.at(i).get
-    }
-    result += "}GAP{"
-    for (i <- 0 until post.length) {
-      result += post.at(post.length - i - 1).get
-    }
-    result += "}"
-    result
-  }
 
   def contents: Array[Char] = {
     val bufferContents = new Array[Char](length)
@@ -426,8 +402,7 @@ class GapBuffer(var file: File, initialSize: Int) {
     bufferContents
   }
 
-  /**  
-    * 
+  /** Read the contents of the buffer from a file.  
     */
   def readFromFile(file: java.io.File, failIfNotFound: Boolean) {
     clear
@@ -441,16 +416,29 @@ class GapBuffer(var file: File, initialSize: Int) {
     in.close()
   }
 
-  def writeToFile(file: java.io.File, create: Boolean) {
-
+  /** write the contents of the buffer to a file.
+    * @param file the filename to write to
+    * @param backup true if the current file should be renamed and saved as a backup.
+    */
+  def writeToFile(file: java.io.File, backup: Boolean) {
+    if (file.exists && backup) {
+      val backupFile = new File(file.getName + ".BAK")
+      if (backupFile.exists) {
+        backupFile.delete
+      }
+      file.renameTo(backupFile)
+    }
+    val out = new FileWriter(file)
+    out.write(contents)
+    out.close
   }
   
-  def stepCursorBackward = {
-    if (pre.length > 0) {
-      val c = pre.pop
-      post.push(c)
-      reverseUpdatePosition(c)
-    }
+
+  /** Resets the buffer state to match the file.
+    */
+  private def clear = {
+    pre.reset
+    post.reset
   }
 
   private def primInsertChar(c: Char) = {
@@ -468,14 +456,6 @@ class GapBuffer(var file: File, initialSize: Int) {
       currentColumn = 0
     } else {
       currentColumn += 1
-    }
-  }
-
-  def stepCursorForward = {
-    if (post.length > 0) {
-      val c = post.pop
-      pre.push(c)
-      forwardUpdatePosition(c)
     }
   }
 
@@ -500,6 +480,84 @@ class GapBuffer(var file: File, initialSize: Int) {
     } else {
       currentColumn -= 1
     }
+  }
+
+  // Debugging only
+  override def toString(): String = {
+    var result = "{"
+    for (i <- 0 until pre.length) {
+      result += pre.at(i).get
+    }
+    result += "}GAP{"
+    for (i <- 0 until post.length) {
+      result += post.at(post.length - i - 1).get
+    }
+    result += "}"
+    result
+  }
+
+}
+
+
+/** A utility class which represents one of the two contiguous text segments of
+  * a gap buffer. The main behavior of this resembles a stack, where you push or
+  * pop off of the active end. 
+  */
+class BufferStack {
+  val initLength = 65536
+
+  /** Returns the current number of characters in this buffer.
+    */
+  var length: Int = 0
+  
+  private var chars: Array[Char] = new Array[Char](initLength)
+  
+  /** Pushes a character onto the end of the buffer.
+    */
+  def push(c: Char) {
+    if (length >= chars.length - 1) {
+      val newChars = new Array[Char](chars.length * 2)
+      for (i <- 0 until length) {
+        newChars(i) = chars(i)
+        chars = newChars
+      }
+    }
+    chars(length) = c
+    length = length + 1
+  }
+  
+  /** Pops character off the active end of the buffer. Throws an
+    * exception if the buffer is empty. 
+    */
+  def pop: Char = {
+    if (length > 0) {
+      length = length - 1
+      chars(length)
+    } else {
+      throw new BufferStackUnderflowException
+    } 
+  }
+  
+  /** Get the character at a position.
+    * @param idx the character position 
+    * @return Some of the character, or else None.
+    */ 
+  def at(idx: Int): Option[Char] = {
+    if (idx >= length) {
+      None
+    } else {
+      Some(chars(idx))
+    }
+  }
+  
+  /** Get the entire buffer 
+    */
+  def all: String = new String(chars.slice(0, length))
+
+  /** Reset the buffer, deleting all of its contents.
+    */
+  def reset {
+    length = 0
   }
 }
 

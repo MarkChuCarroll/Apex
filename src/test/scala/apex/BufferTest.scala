@@ -13,9 +13,9 @@
 // limitations under the License.
 
 package apex
-import org.junit.Test
+
+import org.junit.{Before, Test}
 import org.junit.Assert._
-import org.junit.Before
 
 class BufferSpec() {
   var buf: GapBuffer = null
@@ -24,7 +24,6 @@ class BufferSpec() {
   def initBuffer() {
     buf = new GapBuffer()
   }
-  
 
   @Test
   def testEmptyBufferProperties() {
@@ -53,10 +52,8 @@ class BufferSpec() {
      assertEquals("{1234567}GAP{890}", buf.toString()) 
   }
 
-
   @Test
   def testColumnTracking() {
-    System.err.println("======== starting column trackingtest")
     buf.insertString("abcdef\nghijkl\nmnopqr\nstu")
     buf.moveTo(12)
     assertEquals(5, buf.currentColumn)
@@ -142,8 +139,14 @@ class BufferSpec() {
   }
   
   @Test
+  def testGetPositionOfLine() {
+    buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
+    assertEquals(Some(8), buf.positionOfLine(2))
+  } 
+  
+  @Test
   def testGetLine() {
     buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
-//    assertEquals("abcdefg", buf.getLine(1).map(new String(_)).getOrElse("wrong"))
+    assertEquals("abcdefg", buf.getLine(1).map(new String(_)).getOrElse("wrong"))
   }
 }
