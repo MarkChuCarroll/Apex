@@ -149,4 +149,14 @@ class BufferSpec() {
     buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
     assertEquals("abcdefg", buf.getLine(1).map(new String(_)).getOrElse("wrong"))
   }
+
+  @Test
+  def testCopyLines() {
+    buf.insertString("1111\n2222\n3333\n4444\n5555\n6666\n7777\n8888\n")
+    assertEquals("3333\n4444\n", new String(buf.copyLines(3, 2).get))
+    assertEquals("7777\n8888\n", new String(buf.copyLines(7, 2).get))
+    assertEquals("7777\n8888\n", new String(buf.copyLines(7, 10).get))
+    assertEquals(None, buf.copyLines(10, 12))
+    assertEquals("1111\n", new String(buf.copyLines(1, 1).get))
+  }
 }

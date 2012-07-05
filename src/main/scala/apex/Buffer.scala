@@ -260,6 +260,20 @@ class GapBuffer(var file: File, initialSize: Int) {
     })
   }
 
+  def copyLines(startLine: Int, numLines: Int): Option[Array[Char]] = {
+    moveToLine(startLine) 
+    if (currentLine != startLine) None
+    else {
+      val endLine = startLine + numLines - 1
+      val buf =  new StringBuilder
+      while (currentLine <= endLine && post.length > 0) {
+        buf.append(charAt(pre.length).get)
+        stepCursorForward
+      }
+      Some(buf.toArray)
+    }
+  }
+  
   /** Inserts a string at an index
     * @param pos the character index where the insert should be performed
     * @param str a string containing the characters to insert
