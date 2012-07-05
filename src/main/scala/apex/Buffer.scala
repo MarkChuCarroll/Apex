@@ -273,6 +273,13 @@ class GapBuffer(var file: File, initialSize: Int) {
       Some(buf.toArray)
     }
   }
+
+  def deleteLines(startLine: Int, numLines: Int): Option[Array[Char]] = {
+    positionOfLine(startLine).map({ startPos =>
+      val endPos = positionOfLine(startLine + numLines).getOrElse(length)
+      deleteRange(startPos, endPos)
+    })
+  }
   
   /** Inserts a string at an index
     * @param pos the character index where the insert should be performed

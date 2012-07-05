@@ -159,4 +159,13 @@ class BufferSpec() {
     assertEquals(None, buf.copyLines(10, 12))
     assertEquals("1111\n", new String(buf.copyLines(1, 1).get))
   }
+
+  @Test
+  def testDeleteLines() {
+    buf.insertString("1111\n2222\n3333\n4444\n5555\n6666\n7777\n8888\n")
+    assertEquals("3333\n4444\n", new String(buf.deleteLines(3, 2).get))
+    assertEquals("1111\n2222\n5555\n6666\n7777\n8888\n", new String(buf.contents))
+    assertEquals("7777\n8888\n", new String(buf.deleteLines(5, 3).get))
+    assertEquals("1111\n2222\n5555\n6666\n", new String(buf.contents))
+  }
 }
