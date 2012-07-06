@@ -1,4 +1,4 @@
-//  Copyright 2011 Mark C. Chu-Carroll
+//  Copyright 2012 Mark C. Chu-Carroll
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -80,6 +80,33 @@ class ScreenGridTest {
     assertEquals("  hello\n\nworld\n\n\nfoo\n", grid.render())
     grid.insertBlankLine(5)
     assertEquals("  hello\n\nworld\n\n\n\n", grid.render())
+  }
+
+}
+
+
+class ViewTest {
+  var grid: ScreenGrid = null
+  var buf: GapBuffer = null
+  var view: BufferView = null
+
+  @Before
+  def initBufferAndView() {
+    grid = new SimpleScreenGrid(6, 10)
+    buf = new GapBuffer()
+    buf.insertString("1111\n2222\n3333\n4444\n5555\n6666\n7777\n8888\n")
+    view = new BufferView(buf, grid)
+  }
+
+  @Test
+  def testDisplayAt() {
+    view.displayAt(2)
+    assertEquals("0:|2222|\n1:|3333|\n2:|4444|\n3:|5555|\n4:|6666|\n5:|7777|\n",
+                 grid.renderDebug())
+    view.displayAt(4)
+    assertEquals("0:|4444|\n1:|5555|\n2:|6666|\n3:|7777|\n4:|8888|\n5:||\n",
+                 grid.renderDebug())
+    
   }
 
 }

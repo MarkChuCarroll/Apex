@@ -387,7 +387,9 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
   // *not* guarantee that the cursor will be unchanged.
 
   def copyLine(lineNum: Int): Option[Array[Char]] = {
-    copyLines(lineNum, 1)
+    copyLines(lineNum, 1) map { line =>
+      line.slice(0, line.length - 1)
+    }
 //    positionOfLine(lineNum).map({ start =>
 //      val endMaybeWithNewline = positionOfLine(lineNum + 1).map(_ - 1).getOrElse(length)
 //      val end = if (charAt(endMaybeWithNewline) == '\n') {

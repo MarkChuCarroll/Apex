@@ -173,6 +173,19 @@ class SimpleScreenGrid(override val lines: Int, override val columns: Int)
   override def get(line: Int, col: Int): (Char, Char) = (getChar(line, col), getAttr(line, col))
 }
 
-abstract class BufferView(buf: Buffer, grid: ScreenGrid) {
-  
+class BufferView(val buffer: Buffer, val grid: ScreenGrid) {
+  /** Update the display to show the buffer starting at the specified line
+    */
+  def displayAt(viewLine: Int) {
+    for { linenum <- 0 until grid.lines } {
+      grid.clearLine(linenum)
+      buffer.copyLine(viewLine + linenum).map({ line =>
+        (0 until line.length).foreach({ i =>
+          if (i < grid.columns) {
+            grid.setChar(linenum, i)(line(i))
+          }
+        })
+      })
+    }      
+  }
 }
