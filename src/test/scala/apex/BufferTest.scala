@@ -17,7 +17,7 @@ package apex
 import org.junit.{Before, Test}
 import org.junit.Assert._
 
-class BufferSpec() {
+class BufferTest {
   var buf: GapBuffer = null
   
   @Before
