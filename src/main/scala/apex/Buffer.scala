@@ -243,21 +243,23 @@ class GapBuffer(var file: File, initialSize: Int) {
   // implementation still uses a cursor, and these methods do
   // *not* guarantee that the cursor will be unchanged.
 
-  def getLine(lineNum: Int): Option[Array[Char]] = {
-    positionOfLine(lineNum).map({ start =>
-      val endMaybeWithNewline = positionOfLine(lineNum + 1).map(_ - 1).getOrElse(length)
-      val end = if (charAt(endMaybeWithNewline) == '\n') {
-          endMaybeWithNewline - 1
-        } else {
-          endMaybeWithNewline
-        }
-      val len = end - start
-      val result = new Array[Char](len)
-      for (i <- 0 until len) {
-        result(i) = charAt(start + i).get
-      }
-      result
-    })
+  def copyLine(lineNum: Int): Option[Array[Char]] = {
+    copyLines(lineNum, 1)
+//    positionOfLine(lineNum).map({ start =>
+//      val endMaybeWithNewline = positionOfLine(lineNum + 1).map(_ - 1).getOrElse(length)
+//      val end = if (charAt(endMaybeWithNewline) == '\n') {
+//          endMaybeWithNewline - 1
+//        } else {
+//          endMaybeWithNewline
+//        }
+//      val len = end - start
+//      System.err.println("End = " + end + ", start = " + start)
+//      val result = new Array[Char](len)
+//      for (i <- 0 until len) {
+//        result(i) = charAt(start + i).get
+//      }
+//      result
+//    })
   }
 
   def copyLines(startLine: Int, numLines: Int): Option[Array[Char]] = {
