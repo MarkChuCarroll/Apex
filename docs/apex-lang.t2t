@@ -28,13 +28,11 @@ to the original buffer.
 As I said above, skimming is a basic concept. There's always a //current
 range// which is the target of any program statement. Skimming is a way of
 sliding a cursor around the range. For example, a program like 
-``2ml 3m s/foo/`` means "from the cursor point in the current range, move forward two lines, then forward three characters, and thes move the cursor to the start of the first match of regex 'foo'".
-
+``2ml 3m s/foo/`` means "from the cursor point in the current range, move forward two lines, then forward three characters, and then move the cursor to the start of the first match of regular expression 'foo'".
 
 == Success and Failures ==
 
-
-In Skimmer programs, all conditions are driven by the idea of 
+In Skimmer programs, all conditions are driven by the idea of
 success and failure. //Any// program statement or expression can be
 used as the condition of a control structure. If the command completes
 successfully, then it's treated as true.
@@ -43,39 +41,26 @@ This has a variety of very interesting impacts on the language. For
 example, there is no need for a conditional statement. Any two
 statements connected in sequence are, effectively a conditional. If
 the first statement fails, then the sequence fails - so ``X Y`` is
-effectively "if X then Y". If/then/else is done using alternation: 
+effectively "if X then Y". If/then/else is done using alternation:
 ``X|Y`` basically does ``X``; if ``X`` fails, then it does ``Y``.
 
 
 = Syntax =
 
-
-Most numeric parameters are passed in postfix syntax. So to move
-three lines, you put the parameter "3" first: "3m". Most string
-parameters are passed postfix.
-
-Multiple parameters are wrapped in parens; single parameters can be
-done without parens.
-
-
-
-
+Commands come before explicit parameters. In addition to specified parameters, there' always a cursor which is passed explicitly.
 
 == Motion Commands ==
 
-
   - Move cursor a specific distance: ``m``, for move.  ``b`` is an
-    alias for backward. ``3b`` is equivalent to ``-3m``.
-    Optionally specifies a unit with the numeric argument: ``c`` for
-    character, ``l`` for line, and ``p`` for page. ``3lf`` moves the
+    alias for backward. ``b`` is equivalent to ``m-3``.
+   Optionally specifies a unit with the numeric argument: ``c`` for
+    character, ``l`` for line, and ``p`` for page. ``f3l`` moves the
     cursor forward by three lines.
   - Move the cursor to a specific location: ``j`` for jump. Takes
     parameters just like ``f``.
   - Move to pattern: ``s/pattern/``.
 
-
 == Selection Commands ==
-
 
   - find and select matching pattern: ``s/pattern/``
   - expand selection to words: ``ew``
@@ -87,11 +72,11 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 == Actions ==
 
 
-=== Variables and Expressions===
+=== Variables and Expressions ===
 
 
 - ``$ident`` - a variable is a string of letters, digits, and underscores
-   preceeded by a dillar sign.
+   preceeded by a dollar sign.
 - assignments: ``$ident : expr``
 - Arithmetic works roughly as usual: ``*``(mult), ``/`` (divide),
   ``+`` (add), ``-`` (subtract).
@@ -101,7 +86,7 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 === Edits ===
 
 
-  - Delete: ``d``. Takes parameter just like ``f``. ``3ld`` deletes
+  - Delete: ``d``. Takes parameter just like ``f``. ``d3l`` deletes
     three lines.
 
   - insert: ``i/stuff/``.
@@ -114,7 +99,12 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 
   - Copy selection: ``c``
   - Kill selection: ``k``.
-  - execute program on selection (push and run)	``sel_expr x { code }``.
+  - execute program on selection (push and run)	``sel_expr x { code }``. fThis
+    is, effectively, just using a combination of success/fail and the
+    implicit selection/cursor. The selection expression either succeeds or
+    fails. If it fails, the entire expression containing it fails, so
+    the x command doesn't run. But if it succeeds, then x gets run, which
+    executes the code block.
 
 
 === I/O ===
@@ -128,7 +118,8 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 == Examples ==
 
 
-- Replace all tabs with spaces:  ``a/^i/  x{ (8 - ($_col % 8)) rx {i/ /} }``
+- Replace all tabs with spaces:  
+    ``a/^i/  x{ $count:(8 - ($_col % 8))  r($count)x {i/ /} }``
    - match ``^i`` (tab)
    - for all matches, execute the block. (ax - all-matches-execute)
    - take the column, mod-8, and subtract that from 8. That gives
@@ -139,17 +130,20 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 
 - Can clean that up:
   ``sub nearest_tab { 8 - ($_col % 8) }``
-  ``a/^i/ { nearest_tab() rx {i/ /}}``
-- ``sub f {| $x |   ($x, 0)= ? 1 : ((x-1)f * x)}``
+  ``a/^i/ { r(nearest_tab())x {i/ /}}``
+
+
+
+- ``sub f {| $x |   (($x, 0)= 1) | *(f(x-1), x)}``
   - declare ``f`` as a subroutine.
   - Code block is the body of the subroutine.
   - subroutines either succeed or fail, and return a value.
-  - ``($x,0)=`` is a comparison function; it succeeds if its parameters are equal.
-  - ``($x, 0)= 1`` runs "1" if ``($x, 0)=`` succeeds. ``1`` just returns
+  - ``=($x,0)`` is a comparison function; it succeeds if its parameters are equal.
+  - ``=($x, 0) 1`` runs "1" if ``($x, 0)=`` succeeds. ``1`` just returns
     the value 1. So it is, effectively, "if $x = 0 then return 1".
   - ``|`` is alternative; if its left fails, then its right is evaluated. 
   - So... this is a factorial function. If comparing ``$x`` to 0, we return
-    1. Otherwise, we evaluate ``(($x,1)-f,$x)*`` - that is, ``($x,1)-``
+    1. Otherwise, we evaluate ``*(f(-($x,1)),$x)`` - that is, ``-($x,1)``
     which evaluates x-1; ``f``, which evaluates the subroutine ``f`` (it's
     a recursive call) on x-1, and then multiplies it by x. 
 

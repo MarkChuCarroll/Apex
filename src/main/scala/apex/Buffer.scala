@@ -31,7 +31,7 @@ trait Buffer {
   
   /** Move the cursor backwards one step.
     */
-  def stepCursorBackward 
+  def stepCursorBackward
   
    /** Gets the number of characters in this buffer.
     * @return the number of characters
@@ -320,9 +320,10 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
       reverseUpdatePosition(c)
       val undo = DeleteOperation(this, pre.length, Array(c))
       pushUndo(undo)
-    }
+      c
+    } else 0
   }
-
+  
   /** Deletes a string of characters starting at the current cursor position. If the number of
     * characters to delete is negative, it will delete characters behind the cursor.
     * @return the deleted characters.
@@ -383,13 +384,14 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
 
   // absolute position operations: methods that operate on a buffer
   // without any notion of "current point". The underlying
-  // implementation still uses a cursor, and these methods do
+  // implementation still uses a cursor. Side-effecting operations do
   // *not* guarantee that the cursor will be unchanged.
 
   def copyLine(lineNum: Int): Option[Array[Char]] = {
     copyLines(lineNum, 1) map { line =>
       line.slice(0, line.length - 1)
     }
+    
 //    positionOfLine(lineNum).map({ start =>
 //      val endMaybeWithNewline = positionOfLine(lineNum + 1).map(_ - 1).getOrElse(length)
 //      val end = if (charAt(endMaybeWithNewline) == '\n') {
@@ -408,19 +410,23 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
   }
 
   def copyLines(startLine: Int, numLines: Int): Option[Array[Char]] = {
+    val p = currentPosition    
     moveToLine(startLine) 
-    if (currentLine != startLine) None
-    else {
-      val endLine = startLine + numLines - 1
-      val buf =  new StringBuilder
-      while (currentLine <= endLine && post.length > 0) {
-        buf.append(charAt(pre.length).get)
-        stepCursorForward
+    val result =
+      if (currentLine != startLine) None
+      else {
+        val endLine = startLine + numLines - 1
+            val buf =  new StringBuilder
+            while (currentLine <= endLine && post.length > 0) {
+              buf.append(charAt(pre.length).get)
+              stepCursorForward
+            }
+        Some(buf.toArray)
       }
-      Some(buf.toArray)
-    }
-  }
-
+    moveTo(p)
+    result
+  } 
+  
   def deleteLines(startLine: Int, numLines: Int): Option[Array[Char]] = {
     positionOfLine(startLine).map({ startPos =>
       val endPos = positionOfLine(startLine + numLines).getOrElse(length)
@@ -428,7 +434,7 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
     })
   }
   
-  /** Inserts a string at an index
+  /** Inserts a string at an index. 
     * @param pos the character index where the insert should be performed
     * @param str a string containing the characters to insert
     */
@@ -481,28 +487,33 @@ class GapBuffer(var file: File, initialSize: Int) extends Buffer {
         this, end,
         "End of requested range past end of buffer")
     }
-
     if (end < start) {
       throw new BufferPositionError(
         this, end,
         "End of requested range is greater than start")
     }
+    val p = currentPosition
     val size = end - start;
     val result = new Array[Char](end - start)
     for (i <- 0 until size) {
       result(i) = charAt(start + i).get
     }
+    moveTo(p)
     result
   }
 
   /** Converts a line/column to a character index.
    */
   def positionOf(linenum: Int, colnum: Int): Option[Int] = {
+    val p = currentPosition
     moveToLine(linenum)
     moveToColumn(colnum)
-    if (currentLine == linenum && currentColumn == colnum) {
-      Some(currentPosition)
-    } else None
+    val result =
+      if (currentLine == linenum && currentColumn == colnum) {
+        Some(currentPosition)
+      } else None
+    moveTo(p)
+    result
   }
 
   /** Returns Some of the character position of the first character in the specified line,
