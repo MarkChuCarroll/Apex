@@ -8,27 +8,15 @@ Last updated: %%mtime(%A %B %d, %Y)
 
 == Ranges ==
 
-All command operate on //ranges//. A range is a sequence of consecutive
-characters. A buffer is a special case of a range - it's a range that's also
-associated with a file. Most other ranges will be pieces of a buffer.
+All command operate on //ranges//. A range is a sequence of consecutive characters. A buffer is a special case of a range - it's a range that's also associated with a file. Most other ranges will be pieces of a buffer.
 
-The way that commands work is by //skimming// the buffer. That is, the most
-basic operation in Skimmer is searching for a region of the current
-range, and then performing some action there.
+The way that commands work is by //skimming// the buffer. That is, the most basic operation in Skimmer is searching for a region of the current range, and then performing some action there. While a given range is the focus of execution, it contains a //cursor// which selects a range within the currently active range.
 
-The canonical skimmer operation is slice-and-splice. A slice-and-splice
-includes an expression that describes a range of text in an input range. The
-input range is then sliced into a collection of sub-ranges, called
-//slices// - one for each match of the expression. Then some edit command
-is executed on each of the slices, and the result is //spliced// back in
-to the original buffer.
+The canonical skimmer operation is slice-and-splice. A slice-and-splice includes an expression that describes a range of text in an input range. The input range is then sliced into a collection of sub-ranges, called //slices// - one for each match of the expression. Then some edit command is executed on each of the slices, and the result is //spliced// back in to the original buffer.
 
 == Skimming ==
 
-As I said above, skimming is a basic concept. There's always a //current
-range// which is the target of any program statement. Skimming is a way of
-sliding a cursor around the range. For example, a program like 
-``2ml 3m s/foo/`` means "from the cursor point in the current range, move forward two lines, then forward three characters, and then move the cursor to the start of the first match of regular expression 'foo'".
+There's always a //current range// which is the target of any program statement. Skimming is a way of sliding a cursor around the range. For example, a program like  ``2ml 3m s/foo/`` means "from the cursor point in the current range, move forward two lines, then forward three characters, and then move the cursor to the start of the first match of regular expression 'foo'".
 
 == Success and Failures ==
 
@@ -53,41 +41,51 @@ Commands come before explicit parameters. In addition to specified parameters, t
 
   - Move cursor a specific distance: ``m``, for move.  ``b`` is an
     alias for backward. ``b`` is equivalent to ``m-3``.
-   Optionally specifies a unit with the numeric argument: ``c`` for
+    Each move specifies a unit with the numeric argument: ``c`` for
     character, ``l`` for line, and ``p`` for page. ``f3l`` moves the
     cursor forward by three lines.
   - Move the cursor to a specific location: ``j`` for jump. Takes
     parameters just like ``f``.
-  - Move to pattern: ``s/pattern/``.
-
-== Selection Commands ==
-
-  - find and select matching pattern: ``s/pattern/``
-  - expand selection to words: ``ew``
-  - expand selection to lines: ``el``
-
-For example, you could select a word around "set" using ``s/set/ ew``.
-
+  - Move to pattern: ``s/pattern/``. The match will become the new 
+    cursor.
+  - Extend cursor: ``e``, followed by either ``<`` or ``>`` as
+    an indicator for beginning or end of the cursor followed by
+    a move command.  Moves either the  beginning or end of the
+    current cursor, altering the current range.  
+    As a special case, if you ``ew`` or ``el`` without specifying an
+    anchor or a distance, it will extend the selection to the current
+    word/line. For example, you could select a word around "set" 
+    using ``s/set/ ew``.
 
 == Actions ==
-
 
 === Variables and Expressions ===
 
 
-- ``$ident`` - a variable is a string of letters, digits, and underscores
-   preceeded by a dollar sign.
-- assignments: ``$ident : expr``
-- Arithmetic works roughly as usual: ``*``(mult), ``/`` (divide),
-  ``+`` (add), ``-`` (subtract).
-- $f(params) is function application.
+- ``$ident`` - a variable is a string of letters, digits, and underscores preceeded by a dollar sign.
+- assignments: there are several forms of assignment:
+   - ``!($var, expr)``: assign a variable to a value.
+   - ``!$var``: assign the contents of the current range to
+     a variable.
+   - ``!<$var``: assign the position of the beginning of the range
+     to the variable.
+   - ``!>$var``: assign the position of the end of the range to the 
+     variable.
+- Expressions are written inside of square brackets: 
+   - ``+``, ```-```, ``*``, ``/``, and ``%`` are all integer 
+     arithmetic in expressions. ``[3 + 5]`` evaluates to 8.
+   - ``.`` is string concatenation. ``[3 . 5]`` evaluates to ``35``.
+   - ``<``, ``>``, ``<=``, ``>=``, and ``!`` are string comparison,
+    which succeed  if true, and fail if false.
+   - ``&`` is logical and, which suceeds if both sides succeed.
+   - ``^`` is logical or, which succeeds if either alternative
+     succeeds.
+   - ``#<``, ..., are numeric comparison.
 
-
-=== Edits ===
-
+=== Edits === 
 
   - Delete: ``d``. Takes parameter just like ``f``. ``d3l`` deletes
-    three lines.
+    three lines. 
 
   - insert: ``i/stuff/``.
 
@@ -96,16 +94,30 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 
 === Selection ===
 
-
-  - Copy selection: ``c``
-  - Kill selection: ``k``.
+  - Kill selection: ``d``. 
   - execute program on selection (push and run)	``sel_expr x { code }``. fThis
     is, effectively, just using a combination of success/fail and the
     implicit selection/cursor. The selection expression either succeeds or
     fails. If it fails, the entire expression containing it fails, so
     the x command doesn't run. But if it succeeds, then x gets run, which
     executes the code block.
+	
+=== Iteration ===
 
+- ``a(/pattern/,action)``: all; this is the canonical slice-and-splice. It finds all of the matches for the pattern,
+and then iterates through them, executing the action on all 
+of them.
+- ``r(count,action)``: repeat action count times. Count is either
+  a number, a variable (which must contain a number), or an
+  expression.
+- ``x(action)``: executes the action repeatedly, as long as
+  it succeeds.
+- ``command & command``: perform the first command,
+  and if it succeeds, perform the second.
+- ``command ^ command``: perform the first command, and if it fails,
+  perform the second.
+- 
+  
 
 === I/O ===
 
@@ -119,7 +131,7 @@ For example, you could select a word around "set" using ``s/set/ ew``.
 
 
 - Replace all tabs with spaces:  
-    ``a/^i/  x{ $count:(8 - ($_col % 8))  r($count)x {i/ /} }``
+    ``a/^i/  x{ !($count, [8 - ($_col % 8)]) & r($count)x {i/ /} }``
    - match ``^i`` (tab)
    - for all matches, execute the block. (ax - all-matches-execute)
    - take the column, mod-8, and subtract that from 8. That gives

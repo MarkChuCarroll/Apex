@@ -16,21 +16,22 @@ package apex
 
 import java.io.File
 import scala.collection.mutable.MutableList
+import scala.collection.mutable.ArraySeq
 
 trait ViewCommand {  
 }
 
 case class DisplayChars(
-   chars: Array[Char]) extends ViewCommand
-case class InsertChar(c: Char) extends ViewCommand
+		chars: Seq[Char]) extends ViewCommand
+case class DisplayString(s: String) extends ViewCommand	
+case class DisplayChar(c: Char) extends ViewCommand
 case class SetForegroundColor(color: Int)
 case class SetBackgroundColor(color: Int)
 case class MoveCursor(line: Int, col: Int) extends ViewCommand
-case class ClearToEndOfScreen(line: Int, col: Int) extends ViewCommand
-case class ClearToEndOfLine(line: Int, col: Int) extends ViewCommand
-case class InsertBlankLineBefore(line: Int) extends ViewCommand
-case class DeleteLine(line: Int) extends ViewCommand
-case class SetChar(line: Int, col: Int, c: Char)
+case class ClearToEndOfScreen() extends ViewCommand
+case class ClearToEndOfLine() extends ViewCommand
+case class InsertBlankLineBefore() extends ViewCommand
+case class DeleteLine() extends ViewCommand
 
 /** A controller that queues up commands until the current command
   * queue is requested. 
@@ -44,11 +45,13 @@ trait EditorController {
   def getCommands: List[ViewCommand]
   
   /** The editor action performed when a user types a character
+    * If it's not a newline, inserts the character into the current line.
+    * If it is a newline, then breaks the current line.  
     */
   def typeChar(c: Char)
   
   /** The editor action performed when a user types backspace 
-    */
+   */
   def backspace
   
   /** The editor action performed when the user moves the cursor backwards
@@ -86,9 +89,15 @@ trait EditorController {
   /** The editor action to jump the cursor and the view to a line
     */
   def jumpToLine(line: Int)
+  
   def save
   def saveAs(file: File)
+  
+  /** Mark a range of text as being highlighted as a selection.
+    * This means changing the background of the characters.  
+    */
   def select(start: Int, end: Int)
+  
   def selectLines(startLine: Int, endLine: Int)
   def cut
   def copy
@@ -102,13 +111,18 @@ abstract class EditorServerController(val buf: GapBuffer, val view: ScreenGrid)
     extends EditorController {
   
   val commands: MutableList[ViewCommand] = new MutableList[ViewCommand]
-
+  
   /** the line number in the buffer which is shown on the top line
     * of the view.
     */
   var viewPosition: Int = 1
   var cursorLine: Int = 0
   var cursorColumn: Int = 0
+  
+  def getTextForLine(displayLine: Int): Seq[Char] = {
+    val lineNum = viewPosition + displayLine
+    buf.copyLine(lineNum).getOrElse(ArraySeq[Char]())
+  }
   
   /** Resets the command sequence.
     */
@@ -122,10 +136,25 @@ abstract class EditorServerController(val buf: GapBuffer, val view: ScreenGrid)
   
   /** The editor action performed when a user types a character
     */
-  def typeChar(c: Char)
+  def typeChar(c: Char) {
+    if (c == '\n') {
+      commands += ClearToEndOfScreen()
+      // redraw lines to the end of the screen
+    } else {
+      commands += ClearToEndOfLine()
+      commands += DisplayChar(c)
+      val rest = ""
+      for {
+        c <- rest
+      } {
+        // insert the new character
+        // redraw the rest of the line
+      }
+    }
+  }
   
   def backspace {
-    val c = buf.deleteCharBackwards
+    val c: Char = buf.deleteCharBackwards
     if (c == '\n') {
       refresh
     } else {
@@ -136,12 +165,14 @@ abstract class EditorServerController(val buf: GapBuffer, val view: ScreenGrid)
       commands += MoveCursor(cursorLine, column)
     }
   }
-/*
+
   def back {
     
   }
 
-  def forward
+  def forward = {
+    
+  }
 
   def up
 
@@ -166,5 +197,4 @@ abstract class EditorServerController(val buf: GapBuffer, val view: ScreenGrid)
   def toStart
   def toEnd
   def refresh  
-  */
 }
