@@ -19,30 +19,26 @@ import java.util.Stack
 import scala.collection.mutable.ArraySeq
 import java.io.OutputStream
 import java.io.InputStream
+import scala.util.Try
 
 class BufferException(str: String) extends Exception(str)
 
 class BufferStackException(val msg: String) extends BufferException(msg)
 
-class BufferPositionError(b: Buffer, pos: Int, msg: String)
+class BufferPositionException(b: Buffer, pos: Int, msg: String)
     extends Exception(msg) {
   val buffer = b
   val requestedPosition = pos
   val message = msg
 }
 
-
-case class Selection(val buf: Buffer, val start: Int, val end: Int)
-
-
-trait EditAction {
-  def exec(sel: Selection): Boolean
+class BufferRangeException(val b: Buffer, val start: Int, val length: Int) extends Exception {  
 }
 
 trait Buffer {
   def currentLine: Int
   def currentColumn: Int
-
+  
   /** Move the cursor forward one position.
     */
   def stepCursorForward
@@ -76,7 +72,7 @@ trait Buffer {
     * @param numberOfLines
     * @return Some(the final position) or None if the position isn't in the buffer.
     */
-  def moveByLines(numberOfLines: Int): Option[Int]
+  def moveByLines(numberOfLines: Int): Try[Int]
 
   /** Gets the line and column number of the current cursor position.
     */
@@ -96,27 +92,27 @@ trait Buffer {
 
   /** Gets the character at a position.
     */
-  def charAt(pos: Int): Option[Char]
+  def charAt(pos: Int): Try[Char]
 
   /** Deletes the character before the cursor
     */
-  def deleteCharBackwards: Char
+  def deleteCharBackwards: Try[Char]
 
   /** Deletes a string of characters starting at the current cursor position. If the number of
     * characters to delete is negative, it will delete characters behind the cursor.
     * @return the deleted characters.
     */
-  def delete(s: Int): Option[Seq[Char]]
+  def delete(s: Int): Try[Seq[Char]]
 
   /** Copies a range of characters starting at the current cursor position.
     */
   def copy(size: Int): Seq[Char] 
   
-  def copyLine(lineNum: Int): Option[Seq[Char]]
+  def copyLine(lineNum: Int): Try[Seq[Char]]
 
-  def copyLines(startLine: Int, numLines: Int): Option[Seq[Char]]
+  def copyLines(startLine: Int, numLines: Int): Try[Seq[Char]]
 
-  def deleteLines(startLine: Int, numLines: Int): Option[Seq[Char]]
+  def deleteLines(startLine: Int, numLines: Int): Try[Seq[Char]]
   
   /** Inserts a string at an index
     * @param pos the character index where the insert should be performed
@@ -141,23 +137,23 @@ trait Buffer {
     * @param end the character index of the end of the range to delete
     * @return an array containing the delete characters.
     */
-  def deleteRange(start: Int, end: Int): Option[Seq[Char]]
+  def deleteRange(start: Int, end: Int): Try[Seq[Char]]
 
   /** Retrieves a range of characters.
     * @param start the character index of the start of the range
     * @param end the character index of the end of the range
     * @return an array containing the characters in the range
     */
-  def copyRange(start: Int, end: Int): Option[Seq[Char]]
+  def copyRange(start: Int, end: Int): Try[Seq[Char]]
 
   /** Converts a line/column to a character index.
    */
-  def positionOf(linenum: Int, colnum: Int): Option[Int]
+  def positionOf(linenum: Int, colnum: Int): Try[Int]
 
   /** Returns Some of the character position of the first character in the specified line,
     * or None if the file doesn't have that many lines. 
     */
-  def positionOfLine(line: Int): Option[Int]
+  def positionOfLine(line: Int): Try[Int]
 
   /** Convert a character index to line/column
     */
@@ -178,10 +174,13 @@ trait Buffer {
     * @param backup true if the current file should be renamed and saved as a backup.
     */
   def write(out: OutputStream)
-  
-  def new_mark: BufferMark
+
+
+  def set_mark(name: String): BufferMark
   
   def remove_invalid_marks: Unit
+  
+  def remove_mark(name: String): Unit
   
 }
 

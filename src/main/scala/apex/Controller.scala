@@ -17,6 +17,8 @@ package apex
 import java.io.File
 import scala.collection.mutable.MutableList
 import scala.collection.mutable.ArraySeq
+import scala.util.Success
+import scala.util.Failure
 
 trait ViewCommand {  
 }
@@ -154,16 +156,25 @@ abstract class EditorServerController(val buf: GapBuffer, val view: ScreenGrid)
   }
   
   def backspace {
-    val c: Char = buf.deleteCharBackwards
-    if (c == '\n') {
-      refresh
-    } else {
-      val column = buf.currentColumn 
-      commands += (MoveCursor(cursorLine, 0))
-      val chars = buf.copyLine(buf.currentLine).get      
-      commands += (DisplayChars(chars))
-      commands += MoveCursor(cursorLine, column)
+    buf.deleteCharBackwards match {
+      case Success(c) => {
+        if (c == '\n') {
+          refresh
+        } else {
+          val column = buf.currentColumn 
+          commands += (MoveCursor(cursorLine, 0))
+          val chars = buf.copyLine(buf.currentLine).get      
+          commands += (DisplayChars(chars))
+         
+          commands += MoveCursor(cursorLine, column)
+        }
+      }
+      case Failure(e) => beep
     }
+  }
+  
+  def beep {
+    
   }
 
   def back {

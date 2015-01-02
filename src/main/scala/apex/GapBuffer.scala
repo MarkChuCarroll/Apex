@@ -9,6 +9,11 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import scala.collection.mutable.ArraySeq
+import scala.collection.mutable.HashMap
+import scala.util.Success
+import scala.util.Failure
+import scala.util.Try
+import apex.TypeSafeEquality._
 
 class Mark(val buffer: GapBuffer, var position: Int) extends BufferMark {
   var invalidated = false
@@ -19,26 +24,32 @@ class Mark(val buffer: GapBuffer, var position: Int) extends BufferMark {
 }
 
 class GapBuffer(initialSize: Int) extends Buffer {
-  val pre = new BufferStack("pre")
-  val post = new BufferStack("post")
+  val pre = new ListBufferSegment("pre")
+  val post = new ListBufferSegment("post")
   var currentLine = 1
   var currentColumn = 0
   val undoStack = new Stack[UndoOperation]
   var undoing = false
-  var marks: Seq[Mark] = new ArraySeq[Mark](0)
+  var marks = new HashMap[String,Mark]()
   
   def this() {
     this(65536)
   }
-  
-  def new_mark: BufferMark = {
+
+  def set_mark(name: String): BufferMark = {
     val m = new Mark(this, currentPosition)
-    marks = marks :+ m
+    marks(name) = m
     m
   }
   
+  def remove_mark(name: String) {
+    marks.remove(name)
+  }
+  
   def remove_invalid_marks {
-    marks = marks.filter(m => m.valid)
+    marks = marks.filter({ case (name, mark) =>
+      mark.valid
+    })
   }
 
   // Position-based operations: operations which perform edits relative to
@@ -48,9 +59,13 @@ class GapBuffer(initialSize: Int) extends Buffer {
     */
   def stepCursorForward = {
     if (post.length > 0) {
-      val c = post.pop
-      pre.push(c)
-      forwardUpdatePosition(c)
+      post.pop match {
+        case Success(c) => {
+          pre.push(c)
+          forwardUpdatePosition(c)          
+        }
+        case Failure(e) => ()
+      }
     }
   }  
   
@@ -58,9 +73,13 @@ class GapBuffer(initialSize: Int) extends Buffer {
     */
   def stepCursorBackward = {
     if (pre.length > 0) {
-      val c = pre.pop
-      post.push(c)
-      reverseUpdatePosition(c)
+      pre.pop match {
+        case Success(c) => {
+          post.push(c)
+          reverseUpdatePosition(c)
+        }
+        case Failure(e) => ()
+      }      
     }
   }
   
@@ -73,7 +92,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
     */
   def moveTo(pos: Int) = {
     if (pos < 0 || pos > length) {
-      throw new BufferPositionError(this, pos, "Move to invalid location")
+      throw new BufferPositionException(this, pos, "Move to invalid location")
     }
     moveBy(pos - pre.length)
   }
@@ -87,7 +106,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
       stepCursorForward
     }
     if (currentLine != line) {
-      throw new BufferPositionError(this, line, "Move to invalid line")
+      throw new BufferPositionException(this, line, "Move to invalid line")
     }
   }
 
@@ -99,7 +118,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
       val distance = curcol - col
       moveBy(distance)
       if (currentColumn != col) {
-        throw new BufferPositionError(this, col,
+        throw new BufferPositionException(this, col,
           "line didn't contain enough columns")
       }
     }
@@ -110,14 +129,14 @@ class GapBuffer(initialSize: Int) extends Buffer {
   def moveBy(distance: Int) = {
     if (distance > 0) {
       if (distance > post.length) {
-        throw new BufferPositionError(this, currentPosition + distance, "Tried to move past end of buffer") 
+        throw new BufferPositionException(this, currentPosition + distance, "Tried to move past end of buffer") 
       }
       for (i <- 0 until distance) {
         stepCursorForward
       }
     } else if (distance < 0) {
       if (-distance > pre.length) {
-        throw new BufferPositionError(this, currentPosition + distance, "Tried to move past start of buffer") 
+        throw new BufferPositionException(this, currentPosition + distance, "Tried to move past start of buffer") 
       }      
       for (i <- 0 until (-distance)) {
         stepCursorBackward
@@ -129,18 +148,18 @@ class GapBuffer(initialSize: Int) extends Buffer {
     * @param numberOfLines
     * @return Some(the final position) or None if the position isn't in the buffer.
     */
-  def moveByLines(numberOfLines: Int): Option[Int] = {
+  def moveByLines(numberOfLines: Int): Try[Int] = {
     val targetLine = currentLine + numberOfLines 
     if (targetLine < 0) {
       moveTo(0)
-      None
+      Failure(new BufferRangeException(this, currentPosition, numberOfLines))
     } else if (targetLine > currentLine) {
       while (post.length > 0 && currentLine != targetLine) { stepCursorForward }
-      if (currentLine != targetLine) Some(pre.length) else None
+      if (currentLine != targetLine) Success(pre.length) else Failure(new BufferRangeException(this, currentPosition, numberOfLines)) 
     } else {
       while (pre.length > 0 && currentLine != targetLine) { stepCursorBackward }
       moveToColumn(0)
-      Some(0)
+      Success(0)
     }
   }
 
@@ -155,7 +174,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
     val undo = InsertOperation(this, currentPosition, str.length)
     pushUndo(undo)
     str foreach primInsertChar
-    marks.foreach(m => if (m.position > pos) { m.position += str.length })
+    marks.foreach({case (name, m) => if (m.position > pos) { m.position += str.length }})
   }
 
   /** Inserts a character at the current cursor position.
@@ -165,7 +184,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
     val undo = InsertOperation(this, currentPosition, 1)
     primInsertChar(c)
     pushUndo(undo)
-    marks.foreach(m => if (m.position > pos) { m.position += 1 })
+    marks.foreach({case (rame, m) => if (m.position > pos) { m.position += 1 }})
   }
 
   /** Insert an array of characters at the current cursor position.
@@ -176,60 +195,62 @@ class GapBuffer(initialSize: Int) extends Buffer {
     pushUndo(undo)
     for (c <- cs)
       primInsertChar(c)
-    marks.foreach(m => if (m.position > pos) { m.position += cs.length })      
+    marks.foreach({ case(name, m) => if (m.position > pos) { m.position += cs.length }})      
   }
 
   /** Gets the character at a position.
     */
-  def charAt(pos: Int): Option[Char] = {
+  def charAt(pos: Int): Try[Char] = {
     if (pos < pre.length) {
       pre.at(pos)
     } else if (pos - pre.length < post.length) {
       val idx = post.length - (pos - pre.length) - 1
       post.at(idx)
     } else {
-      None
+      Failure(new BufferPositionException(this, pos, "Invalid position"))
     }
   }
 
   /** Deletes the character before the cursor
     */
-  def deleteCharBackwards: Char = {
-    if (pre.length > 0) {
-      val pos = currentPosition    
-      val c = pre.pop
-      reverseUpdatePosition(c)
-      val undo = DeleteOperation(this, pre.length, Array(c))
-      pushUndo(undo)
-      marks.foreach(m => 
-        if (m.position == pos) { m.invalidate }
-        else if (m.position > pos) {
-          m.position -= 1
-        }
-      )
-      c
-    } else 0
+  def deleteCharBackwards: Try[Char] = {
+    val pos = currentPosition    
+    pre.pop match {
+      case Success(c) => {
+        reverseUpdatePosition(c)
+        val undo = DeleteOperation(this, pre.length, Array(c))
+        pushUndo(undo)
+        marks.foreach({ case (name, m) => 
+          if (m.position == pos) { m.invalidate }
+          else if (m.position > pos) {
+            m.position -= 1
+          }
+        })
+        Success(c)
+      }
+      case Failure(e) => Failure(e)
+    } 
   }
   
   /** Deletes a string of characters starting at the current cursor position. 
     * @return the deleted characters.
     */
-  def delete(numChars: Int): Option[Seq[Char]] = {
+  def delete(numChars: Int): Try[Seq[Char]] = {
     if (numChars == 0 || numChars > post.length) {
-      None
+      Failure(new BufferRangeException(this, currentPosition, numChars))
     } else {
       val pos = currentPosition
-      val result = (0 until numChars).map(_ => post.pop)
+      val result = (0 until numChars).map(_ => post.pop.get)
       val undo = DeleteOperation(this, pre.length, result)
       pushUndo(undo)
-      marks.foreach(m =>
+      marks.foreach({ case (name, m) =>
         if (m.position >= pos && m.position < pos + numChars) {
           m.invalidate
         } else if (m.position >= pos + numChars) {
           m.position -= numChars
         }
-      )
-      Some(result)
+      })
+      Success(result)
     }
   }
 
@@ -245,13 +266,13 @@ class GapBuffer(initialSize: Int) extends Buffer {
   // implementation still uses a cursor. Side-effecting operations do
   // *not* guarantee that the cursor will be unchanged.
 
-  def copyLine(lineNum: Int): Option[Seq[Char]] = {
+  def copyLine(lineNum: Int): Try[Seq[Char]] = {
     copyLines(lineNum, 1) map { line =>
       line.slice(0, line.length - 1)
     }
   }
     
-  def copyLines(startLine: Int, numLines: Int): Option[Seq[Char]] = {
+  def copyLines(startLine: Int, numLines: Int): Try[Seq[Char]] = {
     val current = currentPosition
    val result = positionOfLine(startLine).flatMap( startPos => 
       positionOfLine(startLine + numLines).flatMap( endPos =>
@@ -261,7 +282,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
     result
   } 
   
-  def deleteLines(startLine: Int, numLines: Int): Option[Seq[Char]] = {
+  def deleteLines(startLine: Int, numLines: Int): Try[Seq[Char]] = {
     positionOfLine(startLine).flatMap({ startPos =>
       val endPos = positionOfLine(startLine + numLines).getOrElse(length)
       deleteRange(startPos, endPos)
@@ -300,7 +321,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
     * @param end the character index of the end of the range to delete
     * @return an array containing the delete characters.
     */
-  def deleteRange(start: Int, end: Int): Option[Seq[Char]] = {
+  def deleteRange(start: Int, end: Int): Try[Seq[Char]] = {
     moveTo(start)
     delete(end - start)
   }
@@ -310,35 +331,32 @@ class GapBuffer(initialSize: Int) extends Buffer {
     * @param end the character index of the end of the range
     * @return an array containing the characters in the range
     */
-  def copyRange(start: Int, end: Int): Option[Seq[Char]] = {
-    if (start > length) {
-      None
+  def copyRange(start: Int, end: Int): Try[Seq[Char]] = {
+    if (start > length || end > length) {
+      Failure(new BufferRangeException(this, start, end))
+    } else {
+      if (end < start) {
+        Failure(new BufferPositionException(this, end,
+          "End of requested range is greater than start"))
+      }
+      val p = currentPosition
+      val size = end - start;
+      val result = (0 until size).map(i => charAt(start + i).get)
+      moveTo(p)
+      Success(result)
     }
-    if (end > length) {
-      None
-    }
-    if (end < start) {
-      throw new BufferPositionError(
-        this, end,
-        "End of requested range is greater than start")
-    }
-    val p = currentPosition
-    val size = end - start;
-    val result = (0 until size).flatMap(i => charAt(start + i))
-    moveTo(p)
-    Some(result)
   }
 
   /** Converts a line/column to a character index.
    */
-  def positionOf(linenum: Int, colnum: Int): Option[Int] = {
+  def positionOf(linenum: Int, colnum: Int): Try[Int] = {
     val p = currentPosition
     moveToLine(linenum)
     moveToColumn(colnum)
     val result =
       if (currentLine == linenum && currentColumn == colnum) {
-        Some(currentPosition)
-      } else None
+        Success(currentPosition)
+      } else Failure(new BufferPositionException(this, linenum, "Line not in buffer"))
     moveTo(p)
     result
   }
@@ -346,21 +364,21 @@ class GapBuffer(initialSize: Int) extends Buffer {
   /** Returns Some of the character position of the first character in the specified line,
     * or None if the file doesn't have that many lines. 
     */
-  def positionOfLine(line: Int): Option[Int] = {
+  def positionOfLine(line: Int): Try[Int] = {
     val newlineAsInt: Int = ('\n'.toInt)
     if (line == 1) {
-      Some(0)
+      Success(0)
     } else {
       var current = 1
       for (i <- 0 until length) {
-        if (charAt(i) == Some('\n')) {
+        if (charAt(i) =? Success('\n')) {
           current = current + 1
-          if (current == line) {
-            return Some(i + 1)
+          if (current =? line) {
+            return Success(i + 1)
           }
         }
       }
-      None
+      Failure(new BufferPositionException(this, line, "Invalid line number"))
     }
   }
 
@@ -368,12 +386,12 @@ class GapBuffer(initialSize: Int) extends Buffer {
     */
   def lineAndColumnOf(pos: Int): (Int, Int) = {
     if (pos > length) {
-      throw new BufferPositionError(this, pos, "Position past end of buffer")
+      throw new BufferPositionException(this, pos, "Position past end of buffer")
     }
     var line = 1
     var column = 0
     for (i <- 0 until pos) {
-      if (charAt(i) == Some('\n')) {
+      if (charAt(i) =? Try('\n')) {
         line = line + 1
         column = 0
       } else {
@@ -444,7 +462,7 @@ class GapBuffer(initialSize: Int) extends Buffer {
    * by simple cursor motion - update the line and column positions.
    */
   private def forwardUpdatePosition(c: Char) = {
-    if (c == '\n') {
+    if (c =? '\n') {
       currentLine += 1
       currentColumn = 0
     } else {
@@ -459,14 +477,14 @@ class GapBuffer(initialSize: Int) extends Buffer {
   private def reverseUpdatePosition(c: Char) = {
     if (currentLine == 1) {
       currentColumn = pre.length
-    } else if (c == '\n') {
+    } else if (c =? '\n') {
       currentLine -= 1
       // Look back to either the beginning of the buffer, or the previous
       // newline. The distance from there to the current position is the
       // current column number. (Not sure if this works correctly on the first
       // line.
       var i = 0
-      while ((pre.length - i - 1) > 0 && pre.at(pre.length - i - 1) != Some('\n')) {
+      while ((pre.length - i - 1) > 0 && pre.at(pre.length - i - 1).getOrElse('\0') !=? '\n') {
         i += 1
       }
       currentColumn = i
@@ -491,68 +509,6 @@ class GapBuffer(initialSize: Int) extends Buffer {
 
 }
 
-
-/** A utility class which represents one of the two contiguous text segments of
-  * a gap buffer. The main behavior of this resembles a stack, where you push or
-  * pop off of the active end. 
-  */
-class BufferStack(val name: String) {
-  val initLength = 65536
-
-  /** Returns the current number of characters in this buffer.
-    */
-  var length: Int = 0
-  
-  private var chars: Array[Char] = new Array[Char](initLength)
-  
-  /** Pushes a character onto the end of the buffer.
-    */
-  def push(c: Char) {
-    if (length >= chars.length - 1) {
-      val newChars = new Array[Char](chars.length * 2)
-      for (i <- 0 until length) {
-        newChars(i) = chars(i)
-        chars = newChars
-      }
-    }
-    chars(length) = c
-    length = length + 1
-  }
-  
-  /** Pops character off the active end of the buffer. Throws an
-    * exception if the buffer is empty. 
-    */
-  def pop: Char = {
-    if (length > 0) {
-      length = length - 1
-      chars(length)
-    } else {
-      throw new BufferStackException(s"Text segment $name empty")
-    } 
-  }
-  
-  /** Get the character at a position.
-    * @param idx the character position 
-    * @return Some of the character, or else None.
-    */ 
-  def at(idx: Int): Option[Char] = {
-    if (idx >= length) {
-      None
-    } else {
-      Some(chars(idx))
-    }
-  }
-  
-  /** Get the entire buffer 
-    */
-  def all: String = new String(chars.slice(0, length))
-
-  /** Reset the buffer, deleting all of its contents.
-    */
-  def reset {
-    length = 0
-  }
-}
 
 abstract class UndoOperation {
   def execute

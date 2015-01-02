@@ -16,6 +16,8 @@ package apex
 
 import org.junit.{Before, Test}
 import org.junit.Assert._
+import scala.util.Success
+import scala.util.Success
 
 class BufferTest {
   var buf: GapBuffer = null
@@ -28,6 +30,24 @@ class BufferTest {
   @Test
   def testEmptyBufferProperties() {
     assertEquals(0, buf.length)
+  }
+  
+  @Test
+  def testCharAt() {
+    buf.insertString("hello there")
+    val c = buf.charAt(0)
+    assertEquals('h', buf.charAt(0).get)
+    assertEquals('e', buf.charAt(1).get)
+    assertEquals('l', buf.charAt(2).get)
+    assertEquals('l', buf.charAt(3).get)
+    assertEquals('o', buf.charAt(4).get)
+    assertEquals(' ', buf.charAt(5).get)
+    assertEquals('t', buf.charAt(6).get)
+    assertEquals('h', buf.charAt(7).get)
+    assertEquals('e', buf.charAt(8).get)
+    assertEquals('r', buf.charAt(9).get)
+    assertEquals('e', buf.charAt(10).get)
+    assertTrue(buf.charAt(11).isFailure)
   }
 
   @Test
@@ -72,10 +92,10 @@ class BufferTest {
   def testMarksWithInsertAtGap() {
     buf.insertString("abcde")
     buf.moveBy(-1)   
-    val m1 = buf.new_mark
+    val m1 = buf.set_mark("one")
     val p1 = m1.position
     buf.moveTo(1)
-    val m2 = buf.new_mark
+    val m2 = buf.set_mark("two")
     val p2 = m2.position
     buf.moveTo(p1)
     buf.moveBy(-2)
@@ -112,12 +132,12 @@ class BufferTest {
   def testMarksWithCutForward() {
     buf.insertString("abcde\nfghijklm")
     buf.moveTo(7)    
-    val mark_in_cut = buf.new_mark
+    val mark_in_cut = buf.set_mark("in")
     buf.moveTo(12)
-    val mark_after_cut = buf.new_mark
+    val mark_after_cut = buf.set_mark("after")
     val orig_mark_after_cut = mark_after_cut.position
     buf.moveTo(2)
-    val mark_before_cut = buf.new_mark
+    val mark_before_cut = buf.set_mark("before")
     val pos_mark_before_cut = mark_before_cut.position
     buf.moveTo(4)
     val cut = buf.delete(5).map(seq_to_string).get
@@ -177,7 +197,7 @@ class BufferTest {
     buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
     buf.moveTo(20)
     val cut = buf.delete(20)
-    assertEquals(None, cut)
+    assertTrue(cut.isFailure)
     //assertEquals(9, cut.length)
     //assertEquals("stuvwxyz\n", cut)
     //assertEquals("{abcdefg\nhijklmnop\nqr}GAP{}", buf.toString()) 
@@ -186,7 +206,7 @@ class BufferTest {
   @Test
   def testGetPositionOfLine() {
     buf.insertString("abcdefg\nhijklmnop\nqrstuvwxyz\n")
-    assertEquals(Some(8), buf.positionOfLine(2))
+    assertEquals(Success(8), buf.positionOfLine(2))
   } 
   
   @Test
@@ -196,7 +216,7 @@ class BufferTest {
     assertEquals("hijklmnop", buf.copyLine(2).map(seq_to_string).getOrElse("wrong"))
     assertEquals("qrstuvwxyz", buf.copyLine(3).map(seq_to_string).getOrElse("wrong"))
     assertEquals("wrong", buf.copyLine(4).map(seq_to_string).getOrElse("wrong"))
-    assertEquals(None, buf.copyLine(5))
+    assertTrue(buf.copyLine(5).isFailure)
   }
   
   def seq_to_string(s: Seq[Char]): String = {
@@ -212,7 +232,7 @@ class BufferTest {
     assertEquals("7777\n8888\n", seq_to_string(buf.copyLines(7, 2).get))
     // Behavior change: make fetching a range that goes past the end of the buffer return None
     // assertEquals("7777\n8888\n", seq_to_string(buf.copyLines(7, 10).get))
-    assertEquals(None, buf.copyLines(10, 12))
+    assertTrue(buf.copyLines(10, 12).isFailure)
     assertEquals("1111\n", buf.copyLines(1, 1).map(seq_to_string).get)
   }
 
